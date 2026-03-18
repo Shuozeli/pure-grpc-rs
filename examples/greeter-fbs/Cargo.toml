@@ -1,0 +1,30 @@
+[package]
+name = "greeter-fbs"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "greeter-fbs-server"
+path = "src/server.rs"
+
+[[bin]]
+name = "greeter-fbs-client"
+path = "src/client.rs"
+
+[dependencies]
+grpc-core = { path = "../../grpc-core", default-features = false }
+grpc-server = { path = "../../grpc-server" }
+grpc-client = { path = "../../grpc-client" }
+grpc-codec-flatbuffers = { path = "../../grpc-codec-flatbuffers" }
+flatbuffers = "25"
+bytes = "1"
+http = "1"
+http-body = "1"
+tower-service = "0.3"
+tokio = { version = "1", features = ["full"] }
+tokio-stream = "0.1"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+[build-dependencies]
+grpc-build = { path = "../../grpc-build", default-features = false, features = ["flatbuffers"] }

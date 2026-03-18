@@ -1,0 +1,16 @@
+[workspace]
+resolver = "2"
+members = [
+    "grpc-core",
+    "grpc-server",
+    "grpc-client",
+    "grpc-codegen",
+    "grpc-build",
+    "grpc-codec-flatbuffers",
+    "grpc-health",
+    "grpc-reflection",
+    "examples/greeter-proto",
+    "examples/greeter-fbs",
+]
+# vendor/tonic is NOT in the workspace — reference only
+exclude = ["vendor"]

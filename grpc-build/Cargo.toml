@@ -1,0 +1,41 @@
+[package]
+name = "grpc-build"
+version = "0.1.0"
+edition = "2021"
+description = "Part of pure-grpc-rs: a pure Rust gRPC framework with pluggable codecs"
+repository = "https://github.com/Shuozeli/pure-grpc-rs"
+license = "MIT"
+
+[features]
+default = ["protobuf"]
+protobuf = [
+    "grpc-codegen/protobuf",
+    "protoc-rs-parser",
+    "protoc-rs-analyzer",
+    "protoc-rs-codegen",
+    "protoc-rs-compiler",
+    "protoc-rs-schema",
+]
+flatbuffers = [
+    "grpc-codegen/flatbuffers",
+    "flatc-rs-compiler",
+    "flatc-rs-codegen",
+]
+
+[dependencies]
+grpc-codegen = { path = "../grpc-codegen" }
+prettyplease = "0.2"
+syn = "2"
+proc-macro2 = "1"
+
+protoc-rs-parser = { git = "https://github.com/shuozeli/protobuf-rs.git", optional = true }
+protoc-rs-analyzer = { git = "https://github.com/shuozeli/protobuf-rs.git", optional = true }
+protoc-rs-codegen = { git = "https://github.com/shuozeli/protobuf-rs.git", optional = true }
+protoc-rs-compiler = { git = "https://github.com/shuozeli/protobuf-rs.git", optional = true }
+protoc-rs-schema = { git = "https://github.com/shuozeli/protobuf-rs.git", optional = true }
+
+flatc-rs-compiler = { git = "https://github.com/shuozeli/flatbuffers-rs.git", optional = true }
+flatc-rs-codegen = { git = "https://github.com/shuozeli/flatbuffers-rs.git", optional = true }
+
+[dev-dependencies]
+tempfile = "3"

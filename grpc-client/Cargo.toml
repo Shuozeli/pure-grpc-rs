@@ -1,0 +1,34 @@
+[package]
+name = "grpc-client"
+version = "0.1.0"
+edition = "2021"
+description = "Part of pure-grpc-rs: a pure Rust gRPC framework with pluggable codecs"
+repository = "https://github.com/Shuozeli/pure-grpc-rs"
+license = "MIT"
+
+[features]
+default = []
+tls = ["rustls", "tokio-rustls", "rustls-pemfile", "rustls-native-certs", "hyper-rustls"]
+
+[dependencies]
+grpc-core = { path = "../grpc-core" }
+bytes = "1"
+http = "1"
+http-body = "1"
+http-body-util = "0.1"
+hyper = { version = "1", features = ["client", "http2"] }
+hyper-util = { version = "0.1", features = ["tokio", "http2", "client", "client-legacy"] }
+tower = { version = "0.5", features = ["buffer", "util"] }
+tower-service = "0.3"
+tokio = { version = "1", features = ["net", "rt", "macros"] }
+tokio-stream = "0.1"
+tracing = "0.1"
+
+rustls = { version = "0.23", optional = true, default-features = false, features = ["std", "ring"] }
+tokio-rustls = { version = "0.26", optional = true, default-features = false, features = ["ring"] }
+rustls-pemfile = { version = "2", optional = true }
+rustls-native-certs = { version = "0.8", optional = true }
+hyper-rustls = { version = "0.27", optional = true, default-features = false, features = ["ring", "http2", "native-tokio"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

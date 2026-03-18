@@ -1,0 +1,31 @@
+[package]
+name = "grpc-core"
+version = "0.1.0"
+edition = "2021"
+description = "Part of pure-grpc-rs: a pure Rust gRPC framework with pluggable codecs"
+repository = "https://github.com/Shuozeli/pure-grpc-rs"
+license = "MIT"
+
+[features]
+default = ["prost-codec"]
+prost-codec = ["prost"]
+gzip = ["flate2"]
+
+[dependencies]
+bytes = "1"
+flate2 = { version = "1", optional = true }
+http = "1"
+http-body = "1"
+http-body-util = "0.1"
+tokio = { version = "1", features = ["macros", "rt"] }
+tokio-stream = "0.1"
+futures-core = "0.3"
+pin-project-lite = "0.2"
+percent-encoding = "2"
+base64 = "0.22"
+tracing = "0.1"
+
+prost = { version = "0.13", optional = true }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

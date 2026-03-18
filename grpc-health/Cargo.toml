@@ -1,0 +1,20 @@
+[package]
+name = "grpc-health"
+version = "0.1.0"
+edition = "2021"
+description = "Part of pure-grpc-rs: a pure Rust gRPC framework with pluggable codecs"
+repository = "https://github.com/Shuozeli/pure-grpc-rs"
+license = "MIT"
+
+[dependencies]
+grpc-core = { path = "../grpc-core" }
+grpc-server = { path = "../grpc-server" }
+prost = "0.13"
+bytes = "1"
+http = "1"
+http-body = "1"
+tower-service = "0.3"
+tokio = { version = "1", features = ["sync"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

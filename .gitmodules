@@ -1,0 +1,3 @@
+[submodule "vendor/tonic"]
+	path = vendor/tonic
+	url = https://github.com/hyperium/tonic.git
