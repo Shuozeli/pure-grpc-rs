@@ -159,9 +159,9 @@ Issues found and fixed during the first audit cycle.
 
 ### Performance
 
-**M11. Status cloned on stream error (clone + return)**
-- `grpc-core/src/codec/decode.rs:245-247`
-- **Fix:** Move into state, clone only for return.
+**M11. Status cloned on stream error (clone + return)** -- TODO(refactor) marker added
+- `grpc-core/src/codec/decode.rs:243` — clone is necessary (status stored in state AND returned).
+- Marked with `// TODO(refactor):` for future Arc<Status> consideration.
 
 **M12. Double clone in protobuf service_from_proto**
 - `grpc-codegen/src/protobuf.rs:19-27`
@@ -184,9 +184,9 @@ Issues found and fixed during the first audit cycle.
 
 ### Logic / Correctness
 
-**M17. Codegen stream type naming collision**
-- `grpc-codegen/src/server_gen.rs:354-365`
-- Method `say_hello_stream` yields `SayHelloStreamStream`. Test codifies the bug.
+**M17. Codegen stream type naming collision** -- FIXED (2026-03-19)
+- `grpc-codegen/src/server_gen.rs` — `response_stream_ident()` now strips trailing "Stream" before appending "ResponseStream".
+- `SayHelloStream` now yields `SayHelloResponseStream` instead of `SayHelloStreamResponseStream`.
 
 **M18. Double-unwrap `??` in Endpoint::connect**
 - `grpc-client/src/endpoint.rs:109-110`

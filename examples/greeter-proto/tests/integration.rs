@@ -26,12 +26,12 @@ impl Greeter for TestGreeter {
         })
     }
 
-    type SayHelloServerStreamResponseStream = BoxStream<Result<HelloReply, Status>>;
+    type SayHelloServerResponseStream = BoxStream<Result<HelloReply, Status>>;
 
     fn say_hello_server_stream(
         &self,
         request: Request<HelloRequest>,
-    ) -> BoxFuture<Result<Response<Self::SayHelloServerStreamResponseStream>, Status>> {
+    ) -> BoxFuture<Result<Response<Self::SayHelloServerResponseStream>, Status>> {
         let name = request.into_inner().name;
         Box::pin(async move {
             let stream = tokio_stream::iter((0..3).map(move |i| {
@@ -59,12 +59,12 @@ impl Greeter for TestGreeter {
         })
     }
 
-    type SayHelloBidiStreamResponseStream = BoxStream<Result<HelloReply, Status>>;
+    type SayHelloBidiResponseStream = BoxStream<Result<HelloReply, Status>>;
 
     fn say_hello_bidi_stream(
         &self,
         request: Request<Streaming<HelloRequest>>,
-    ) -> BoxFuture<Result<Response<Self::SayHelloBidiStreamResponseStream>, Status>> {
+    ) -> BoxFuture<Result<Response<Self::SayHelloBidiResponseStream>, Status>> {
         Box::pin(async move {
             let mut input = request.into_inner();
             let (tx, rx) = tokio::sync::mpsc::channel(32);

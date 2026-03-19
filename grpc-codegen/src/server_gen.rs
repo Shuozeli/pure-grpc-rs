@@ -3,6 +3,15 @@ use heck::{ToSnakeCase, ToUpperCamelCase};
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
+/// Build the response-stream associated type name for a streaming method.
+///
+/// Strips a trailing "Stream" from `proto_name` before appending "ResponseStream"
+/// to avoid stutter like `SayHelloStreamResponseStream`.
+fn response_stream_ident(proto_name: &str) -> proc_macro2::Ident {
+    let base = proto_name.strip_suffix("Stream").unwrap_or(proto_name);
+    format_ident!("{}ResponseStream", base)
+}
+
 /// Generate server code for a service definition.
 ///
 /// Produces:
@@ -115,7 +124,7 @@ fn gen_trait_method(method: &MethodDef) -> TokenStream {
         }
         (false, true) => {
             // Server streaming
-            let stream_type = format_ident!("{}ResponseStream", method.proto_name);
+            let stream_type = response_stream_ident(&method.proto_name);
             quote! {
                 fn #name(&self, request: Request<#input>)
                     -> BoxFuture<Result<Response<Self::#stream_type>, Status>>;
@@ -130,7 +139,7 @@ fn gen_trait_method(method: &MethodDef) -> TokenStream {
         }
         (true, true) => {
             // Bidi streaming
-            let stream_type = format_ident!("{}ResponseStream", method.proto_name);
+            let stream_type = response_stream_ident(&method.proto_name);
             quote! {
                 fn #name(&self, request: Request<Streaming<#input>>)
                     -> BoxFuture<Result<Response<Self::#stream_type>, Status>>;
@@ -140,7 +149,7 @@ fn gen_trait_method(method: &MethodDef) -> TokenStream {
 }
 
 fn gen_trait_assoc_type(method: &MethodDef) -> TokenStream {
-    let stream_type = format_ident!("{}ResponseStream", method.proto_name);
+    let stream_type = response_stream_ident(&method.proto_name);
     let output: TokenStream = method
         .output_type
         .parse()
@@ -177,7 +186,7 @@ fn gen_svc_struct(method: &MethodDef, service_name: &proc_macro2::Ident) -> Toke
             }
         }
         (false, true) => {
-            let stream_type = format_ident!("{}ResponseStream", method.proto_name);
+            let stream_type = response_stream_ident(&method.proto_name);
             quote! {
                 struct #svc_name<T: #service_name>(Arc<T>);
                 impl<T: #service_name> grpc_server::ServerStreamingService<#input> for #svc_name<T> {
@@ -205,7 +214,7 @@ fn gen_svc_struct(method: &MethodDef, service_name: &proc_macro2::Ident) -> Toke
             }
         }
         (true, true) => {
-            let stream_type = format_ident!("{}ResponseStream", method.proto_name);
+            let stream_type = response_stream_ident(&method.proto_name);
             quote! {
                 struct #svc_name<T: #service_name>(Arc<T>);
                 impl<T: #service_name> grpc_server::StreamingService<#input> for #svc_name<T> {
@@ -378,7 +387,7 @@ mod tests {
 
         // Server-streaming methods should generate an associated type for the response stream
         assert!(
-            code.contains("SayHelloStreamResponseStream"),
+            code.contains("SayHelloResponseStream"),
             "server-streaming method should generate a stream associated type, got: {code}"
         );
     }

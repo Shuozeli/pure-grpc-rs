@@ -241,6 +241,8 @@ impl StreamingInner {
                     return Poll::Ready(Ok(None));
                 }
                 self.state = State::Error(Some(status.clone()));
+                // TODO(refactor): clone needed because status is both stored and returned.
+                // Consider using Arc<Status> or splitting the error path.
                 return Poll::Ready(Err(status));
             }
             None => {

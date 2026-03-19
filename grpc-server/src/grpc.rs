@@ -374,6 +374,15 @@ mod tests {
             response.headers().get("content-type").unwrap(),
             "application/grpc"
         );
+
+        // Verify the response body actually contains the echoed message.
+        let body = response.into_body();
+        let collected = http_body_util::BodyExt::collect(body).await.unwrap();
+        let data = collected.to_bytes();
+        // gRPC frame: 1 byte compression flag + 4 byte length + payload
+        assert!(data.len() >= 5, "response body too short: {}", data.len());
+        let payload = &data[5..];
+        assert_eq!(payload, b"hello");
     }
 
     #[test]
