@@ -116,8 +116,11 @@ where
 {
     let offset = buf.len();
 
-    // Reserve space for the 5-byte gRPC frame header
+    // Reserve space for the 5-byte gRPC frame header.
     buf.reserve(HEADER_SIZE);
+    // SAFETY: We just reserved at least HEADER_SIZE bytes above, so advancing
+    // the write cursor by HEADER_SIZE stays within the allocated capacity.
+    // The header bytes are written by `finish_encoding` before the buffer is read.
     unsafe {
         buf.advance_mut(HEADER_SIZE);
     }

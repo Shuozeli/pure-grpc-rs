@@ -141,9 +141,9 @@ impl Service<Request<Body>> for Channel {
     fn call(&mut self, req: Request<Body>) -> Self::Future {
         let timeout = self.timeout;
 
-        let fut = match &self.inner {
-            ChannelInner::Http(client) => {
-                let client = client.clone();
+        macro_rules! send_request {
+            ($client:expr) => {{
+                let client = $client.clone();
                 Box::pin(async move {
                     let resp = client
                         .request(req)
@@ -151,18 +151,13 @@ impl Service<Request<Body>> for Channel {
                         .map_err(|e| -> BoxError { Box::new(e) })?;
                     Ok(resp.map(Body::new))
                 }) as BoxFuture<Result<Response<Body>, BoxError>>
-            }
+            }};
+        }
+
+        let fut = match &self.inner {
+            ChannelInner::Http(client) => send_request!(client),
             #[cfg(feature = "tls")]
-            ChannelInner::Https(client) => {
-                let client = client.clone();
-                Box::pin(async move {
-                    let resp = client
-                        .request(req)
-                        .await
-                        .map_err(|e| -> BoxError { Box::new(e) })?;
-                    Ok(resp.map(Body::new))
-                })
-            }
+            ChannelInner::Https(client) => send_request!(client),
         };
 
         match timeout {

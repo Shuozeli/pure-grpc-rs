@@ -45,6 +45,40 @@ impl ServiceDef {
             format!("{}.{}", self.package, self.proto_name)
         }
     }
+
+    /// Validate that this definition will produce correct generated code.
+    ///
+    /// Returns a list of problems. An empty vec means the definition is valid.
+    pub fn validate(&self) -> Vec<String> {
+        let mut errors = Vec::new();
+        if self.name.is_empty() {
+            errors.push("service name is empty".into());
+        }
+        if self.proto_name.is_empty() {
+            errors.push("service proto_name is empty".into());
+        }
+        for (i, m) in self.methods.iter().enumerate() {
+            if m.name.is_empty() {
+                errors.push(format!("method[{i}] name is empty"));
+            }
+            if m.proto_name.is_empty() {
+                errors.push(format!("method[{i}] proto_name is empty"));
+            }
+            if m.proto_name.contains('/') {
+                errors.push(format!(
+                    "method[{i}] proto_name `{}` contains '/'",
+                    m.proto_name
+                ));
+            }
+            if m.input_type.is_empty() {
+                errors.push(format!("method[{i}] `{}` input_type is empty", m.name));
+            }
+            if m.output_type.is_empty() {
+                errors.push(format!("method[{i}] `{}` output_type is empty", m.name));
+            }
+        }
+        errors
+    }
 }
 
 impl MethodDef {
@@ -115,5 +149,27 @@ mod tests {
             method.grpc_path(&svc.fully_qualified_name()),
             "/helloworld.Greeter/SayHello"
         );
+    }
+
+    #[test]
+    fn validate_valid_service() {
+        let svc = sample_service();
+        assert!(svc.validate().is_empty());
+    }
+
+    #[test]
+    fn validate_catches_empty_name() {
+        let mut svc = sample_service();
+        svc.name = String::new();
+        let errors = svc.validate();
+        assert!(errors.iter().any(|e| e.contains("service name is empty")));
+    }
+
+    #[test]
+    fn validate_catches_slash_in_proto_name() {
+        let mut svc = sample_service();
+        svc.methods[0].proto_name = "Say/Hello".into();
+        let errors = svc.validate();
+        assert!(errors.iter().any(|e| e.contains("contains '/'")));
     }
 }

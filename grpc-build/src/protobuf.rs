@@ -74,7 +74,8 @@ pub fn compile_protos(
         for file in &fds.file {
             let package = file.package.as_deref().unwrap_or("");
             for svc_proto in &file.service {
-                let svc_def = service_from_proto(svc_proto, package, "super");
+                let svc_def = service_from_proto(svc_proto, package, "super")
+                    .map_err(|e| io::Error::other(format!("invalid service descriptor: {e}")))?;
                 service_tokens.extend(server_gen::generate(&svc_def));
                 service_tokens.extend(client_gen::generate(&svc_def));
             }

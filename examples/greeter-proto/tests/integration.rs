@@ -389,6 +389,7 @@ async fn reflection_lists_services() {
     let greeter = GreeterServer::new(TestGreeter);
     let reflection = ReflectionServer::builder()
         .register_encoded_file_descriptor_set(greeter_proto::FILE_DESCRIPTOR_SET)
+        .unwrap()
         .build();
 
     let router = Router::new()

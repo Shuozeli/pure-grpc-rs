@@ -128,13 +128,16 @@ pub const ENCODING_HEADER: &str = "grpc-encoding";
 pub const ACCEPT_ENCODING_HEADER: &str = "grpc-accept-encoding";
 
 /// Compress data using the given encoding.
+///
+/// When no compression features are enabled, `CompressionEncoding` is an uninhabited
+/// enum, so this function compiles but can never be called.
 pub fn compress(
     encoding: CompressionEncoding,
-    #[cfg(feature = "gzip")] src: &[u8],
-    #[cfg(not(feature = "gzip"))] _src: &[u8],
-    #[cfg(feature = "gzip")] dst: &mut bytes::BytesMut,
-    #[cfg(not(feature = "gzip"))] _dst: &mut bytes::BytesMut,
+    src: &[u8],
+    dst: &mut bytes::BytesMut,
 ) -> Result<(), std::io::Error> {
+    // Suppress unused-variable warnings when no compression features are enabled.
+    let _ = (&src, &dst);
     match encoding {
         #[cfg(feature = "gzip")]
         CompressionEncoding::Gzip => {
@@ -151,13 +154,15 @@ pub fn compress(
 }
 
 /// Decompress data using the given encoding.
+///
+/// When no compression features are enabled, `CompressionEncoding` is an uninhabited
+/// enum, so this function compiles but can never be called.
 pub fn decompress(
     encoding: CompressionEncoding,
-    #[cfg(feature = "gzip")] src: &[u8],
-    #[cfg(not(feature = "gzip"))] _src: &[u8],
-    #[cfg(feature = "gzip")] dst: &mut bytes::BytesMut,
-    #[cfg(not(feature = "gzip"))] _dst: &mut bytes::BytesMut,
+    src: &[u8],
+    dst: &mut bytes::BytesMut,
 ) -> Result<(), std::io::Error> {
+    let _ = (&src, &dst);
     match encoding {
         #[cfg(feature = "gzip")]
         CompressionEncoding::Gzip => {

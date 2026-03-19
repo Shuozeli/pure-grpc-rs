@@ -85,7 +85,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let greeter = GreeterServer::new(MyGreeter);
 
     let reflection = grpc_reflection::ReflectionServer::builder()
-        .register_encoded_file_descriptor_set(greeter_proto::FILE_DESCRIPTOR_SET)
+        .register_encoded_file_descriptor_set(greeter_proto::FILE_DESCRIPTOR_SET)?
         .build();
 
     let router = Router::new()

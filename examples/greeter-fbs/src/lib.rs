@@ -41,7 +41,10 @@ impl FlatBufferGrpcMessage for HelloRequest {
         let req = flatbuffers::root::<generated::helloworld::HelloRequest>(data)
             .map_err(|e| format!("invalid HelloRequest: {e}"))?;
         Ok(HelloRequest {
-            name: req.name().unwrap_or("").to_string(),
+            name: req
+                .name()
+                .ok_or("HelloRequest.name is required")?
+                .to_string(),
         })
     }
 }
@@ -64,7 +67,10 @@ impl FlatBufferGrpcMessage for HelloReply {
         let reply = flatbuffers::root::<generated::helloworld::HelloReply>(data)
             .map_err(|e| format!("invalid HelloReply: {e}"))?;
         Ok(HelloReply {
-            message: reply.message().unwrap_or("").to_string(),
+            message: reply
+                .message()
+                .ok_or("HelloReply.message is required")?
+                .to_string(),
         })
     }
 }

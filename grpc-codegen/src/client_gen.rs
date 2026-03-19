@@ -7,6 +7,12 @@ use quote::{format_ident, quote};
 ///
 /// Produces an `XxxClient<T>` struct with one async method per RPC.
 pub fn generate(service: &ServiceDef) -> TokenStream {
+    let errors = service.validate();
+    assert!(
+        errors.is_empty(),
+        "invalid ServiceDef for client codegen: {}",
+        errors.join("; ")
+    );
     let client_name = format_ident!("{}Client", service.name);
     let mod_name = format_ident!("{}_client", service.name.to_snake_case());
     let fqn = service.fully_qualified_name();
@@ -225,17 +231,7 @@ mod tests {
         assert!(code.contains("connect"), "should contain connect method");
     }
 
-    /// Extract all items from the generated module.
-    fn module_items(file: &syn::File) -> &Vec<syn::Item> {
-        let module = file.items.iter().find_map(|item| {
-            if let syn::Item::Mod(m) = item {
-                m.content.as_ref().map(|(_, items)| items)
-            } else {
-                None
-            }
-        });
-        module.expect("generated code should contain a module")
-    }
+    use crate::test_util::module_items;
 
     #[test]
     fn generated_client_has_expected_methods() {

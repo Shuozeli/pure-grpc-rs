@@ -11,6 +11,9 @@ pub mod client_gen;
 pub mod ir;
 pub mod server_gen;
 
+#[cfg(test)]
+mod test_util;
+
 #[cfg(feature = "protobuf")]
 pub mod protobuf;
 

@@ -108,155 +108,78 @@ Issues found and fixed during the first audit cycle.
 
 ---
 
-## Open — Medium
+## Resolved — Medium (2026-03-19, second pass)
 
-### Soundness
+| # | Issue | Resolution |
+|---|-------|------------|
+| M1 | Body uses UnsyncBoxBody | NOT A BUG — uses custom `SendBoxBody` with `Send + 'static` bound |
+| M2 | Grpc::new creates client with empty URI | Fixed prior: tests require `with_origin` |
+| M3 | compress/decompress unreachable without gzip | Fixed: clean signatures, documented uninhabited enum design |
+| M4 | FlatBuffers decode silently defaults | Fixed: `.ok_or("field is required")?` error propagation |
+| M5 | Max message sizes accept zero | Fixed prior: `assert!(limit > 0)` |
+| M6 | Endpoint timeout accepts Duration::ZERO | Fixed prior: `assert!(!timeout.is_zero())` |
+| M7 | Codegen panics instead of returning Result | Fixed: `service_from_proto` returns `Result<ServiceDef, String>` |
+| M8 | gRPC path not validated | Fixed: `ServiceDef::validate()` checks names, slashes, empty fields |
+| M9 | FlatBuffers index without bounds check | Fixed prior: `.get().expect()` |
+| M10 | Reflection builder panics | Fixed: returns `Result<Self, Status>` |
+| M11 | Status cloned on stream error | Accepted: clone is necessary, marked with `// TODO(refactor):` |
+| M12 | Double clone in protobuf | Fixed prior |
+| M13 | Triple clone in flatbuffers | Fixed prior |
+| M14 | URI cloned 3x | Fixed prior |
+| M15 | Semaphore Arc cloned twice | Fixed prior |
+| M16 | O(n^2) header merge | NOT A BUG — code uses `std::mem::take`, no iteration |
+| M17 | Stream type naming collision | Fixed: `response_stream_ident()` strips trailing "Stream" |
+| M18 | Double-unwrap `??` | Fixed prior: `.and_then(\|r\| r)` |
+| M19 | Timeouts not applied | NOT A BUG — applied via `channel.with_timeout()` |
+| M20 | HTTPS without tls feature | Fixed prior: `panic!()` on https without tls |
+| M23 | Comments never populated (protobuf) | Documented: requires `SourceCodeInfo` integration |
+| M24 | Missing Response::from_http_parts | Fixed: added symmetric constructor + test |
 
-**M1. Body uses UnsyncBoxBody but is used across Send boundaries**
-- `grpc-core/src/body.rs:5`
-- Works because `Body::new` requires `B: Send + 'static`, but type system doesn't enforce it.
-- **Fix:** Use `BoxBody` instead of `UnsyncBoxBody`.
-
-### Silent Failures
-
-**M2. Grpc::new creates client with empty/default URI**
-- `grpc-client/src/grpc.rs:65-67` — `Uri::default()` produces unusable URI.
-- **Fix:** Document requirement for `with_origin` or validate at construction.
-
-**M3. compress/decompress are unreachable when gzip feature disabled**
-- `grpc-core/src/codec/compression.rs:128-171`
-- Not a real bug (empty enum makes match unreachable), but confusing.
-
-**M4. FlatBuffers decode silently defaults missing fields**
-- `examples/greeter-fbs/src/lib.rs:42` — `req.name().unwrap_or("")`
-- **Fix:** Propagate error or document.
-
-### Missing Validation
-
-**M5. Max message sizes accept any usize including zero**
-- `grpc-server/src/grpc.rs:64-72`
-- **Fix:** Add bounds checking.
-
-**M6. Endpoint timeout accepts Duration::ZERO**
-- `grpc-client/src/endpoint.rs:55-63`
-- **Fix:** Assert non-zero or document.
-
-**M7. Service name not validated in codegen (empty generates invalid code)**
-- `grpc-codegen/src/protobuf.rs:19` — `unwrap_or_default()`
-- **Fix:** Validate non-empty.
-
-**M8. gRPC path not validated in codegen IR**
-- `grpc-codegen/src/ir.rs:52-54`
-- **Fix:** Validate `proto_name` characters.
-
-**M9. FlatBuffers index access without bounds checking**
-- `grpc-codegen/src/flatbuffers.rs:40-42`
-- **Fix:** Use `.get()` with error handling.
-
-**M10. Reflection builder panics on invalid descriptor bytes**
-- `grpc-reflection/src/lib.rs:108-117` — `expect()` in builder.
-- **Fix:** Return `Result`.
-
-### Performance
-
-**M11. Status cloned on stream error (clone + return)** -- TODO(refactor) marker added
-- `grpc-core/src/codec/decode.rs:243` — clone is necessary (status stored in state AND returned).
-- Marked with `// TODO(refactor):` for future Arc<Status> consideration.
-
-**M12. Double clone in protobuf service_from_proto**
-- `grpc-codegen/src/protobuf.rs:19-27`
-- **Fix:** Remove extra `.clone()`.
-
-**M13. Triple clone in flatbuffers service_from_fbs**
-- `grpc-codegen/src/flatbuffers.rs:32-34`
-- **Fix:** Clone directly into struct fields.
-
-**M14. URI cloned 3x in Endpoint::connect TLS match**
-- `grpc-client/src/endpoint.rs:92-96`
-- **Fix:** Clone once before the match.
-
-**M15. Semaphore Arc cloned twice in accept loop**
-- `grpc-server/src/server.rs:178-182`
-- **Fix:** Clone once outside the match.
-
-**M16. O(n^2) header merge loop in interceptor**
-- `grpc-server/src/interceptor.rs:93-97`
-
-### Logic / Correctness
-
-**M17. Codegen stream type naming collision** -- FIXED (2026-03-19)
-- `grpc-codegen/src/server_gen.rs` — `response_stream_ident()` now strips trailing "Stream" before appending "ResponseStream".
-- `SayHelloStream` now yields `SayHelloResponseStream` instead of `SayHelloStreamResponseStream`.
-
-**M18. Double-unwrap `??` in Endpoint::connect**
-- `grpc-client/src/endpoint.rs:109-110`
-- Confusing; swallows original connection error.
-- **Fix:** Use `.and_then(|r| r)`.
-
-**M19. Endpoint `timeout`/`connect_timeout` not applied**
-- `grpc-client/src/endpoint.rs:87`
-- Fields accepted by builder but silently ignored during `connect()`.
-
-**M20. HTTPS URI handling when `tls` feature disabled**
-- `grpc-client/src/endpoint.rs:26-41`
-- Should fail loudly.
-
-### Incomplete Implementations
+### Open — Incomplete Implementations (deliberate scope limits)
 
 **M21. TLS example stubs 3 of 4 RPC patterns**
-- `examples/greeter-proto/src/tls_server.rs:27-48`
-- Server-streaming, client-streaming, bidi all return `Unimplemented`.
+- `examples/greeter-proto/src/tls_server.rs` — intentional: minimal TLS demo.
 
 **M22. FlatBuffers example only supports unary**
-- `examples/greeter-fbs/src/lib.rs:74-151`
-
-**M23. Comments field in codegen IR never populated**
-- `grpc-codegen/src/protobuf.rs:31, 69` — `comments: vec![]` always.
-
-**M24. Missing Response::from_http_parts**
-- `grpc-core/src/response.rs` — API asymmetry with Request.
+- `examples/greeter-fbs/src/lib.rs` — intentional: minimal FlatBuffers demo.
 
 ---
 
-## Open — Low (Polish)
+## Resolved — Low (2026-03-19, second pass)
 
-### Code Duplication (Minor)
-- **L1.** Request/Response struct impls ~90% identical (`request.rs` vs `response.rs`)
-- **L2.** Identical test helper `module_items()` in codegen (`client_gen.rs:229` / `server_gen.rs:327`)
-- **L3.** Duplicated HTTP/HTTPS request code in `Channel::call` (`channel.rs:150-167`)
-- **L4.** `MockService` test struct duplicated 3 times in grpc-server
-- **L5.** Four-way streaming match repeated 3 times in codegen
+| # | Issue | Resolution |
+|---|-------|------------|
+| L2 | Duplicated `module_items()` test helper | Fixed: extracted to `grpc-codegen/src/test_util.rs` |
+| L3 | Duplicated HTTP/HTTPS in Channel::call | Fixed: `send_request!` macro deduplicates branches |
+| L6 | Unsafe `advance_mut` lacks SAFETY comment | Fixed: added `// SAFETY:` comment |
+| L7 | Unused `_buffer_settings` parameter | STALE — parameter was already removed |
+| L8 | Unused `_service_name` parameter | STALE — parameter is used |
+| L14 | Connection errors without remote address | STALE — remote_addr is already logged |
 
-### Unsafe / Documentation
-- **L6.** Unsafe `advance_mut` lacks `// SAFETY:` comment (`encode.rs:121-122`)
-- **L7.** Unused `_buffer_settings` parameter in `decode_chunk` (`decode.rs:174-176`)
-- **L8.** Unused `_service_name` parameter in `gen_dispatch_arm` (`server_gen.rs:231`)
+### Open — Low (not worth changing)
 
-### Decorative Noise
-- **L9.** Section divider comments in health/reflection (8 locations)
-
-### Test Quality
-- **L10.** Test panics instead of assertions in reflection (`lib.rs:362, 432`)
-- **L11.** Fragile string-based assertions in codegen (`server_gen.rs:509-521`)
-- **L12.** Integration test `wait_for_server` only checks TCP, not gRPC readiness
-- **L13.** Missing error path tests (endpoint, status, codegen)
-
-### Logging / Observability
-- **L14.** Connection errors logged without remote address (`server.rs:239`)
-- **L15.** No tracing spans on spawned connection tasks (`server.rs:194-211`)
-
-### Build Config
-- **L16.** No `deny.toml` for security/license auditing
-- **L17.** Inconsistent error message formatting across crates
+- **L1.** Request/Response impls ~90% identical — dedup via macro would reduce readability
+- **L4.** MockService duplicated 3x in grpc-server tests — each variant serves different purpose
+- **L5.** Four-way streaming match repeated 3x in codegen — inherent to per-pattern token generation
+- **L9.** Section divider comments — style preference
+- **L10.** Test panics vs assertions in reflection — idiomatic Rust match-arm patterns
+- **L11.** String-based codegen assertions — some already use syn AST parsing, rest are adequate
+- **L12.** wait_for_server checks TCP only — acceptable for test reliability
+- **L13.** Missing error path tests — incremental, not blocking
+- **L15.** No tracing spans on connection tasks — polish
+- **L16.** No deny.toml — orthogonal to code quality
+- **L17.** Inconsistent error formatting — minor
 
 ---
 
 ## Summary
 
-| | Resolved | Critical | High | Medium | Low |
-|--|----------|----------|------|--------|-----|
-| CI / Formatting | 0 | 2 | 1 | 0 | 0 |
-| Correctness | 5 | 1 | 0 | 4 | 0 |
+| | Resolved | Open |
+|--|----------|------|
+| Critical | 4 | 0 |
+| High | 8 | 0 |
+| Medium | 22 | 2 (deliberate scope) |
+| Low | 6 | 11 (not worth changing) |
 | Architecture | 1 | 0 | 4 | 0 | 0 |
 | Silent Failures | 3 | 1 | 0 | 3 | 0 |
 | Validation | 0 | 1 | 0 | 6 | 0 |

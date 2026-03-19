@@ -52,10 +52,15 @@ impl<T> Response<T> {
 
     pub fn from_http(res: http::Response<T>) -> Self {
         let (head, message) = res.into_parts();
+        Self::from_http_parts(head, message)
+    }
+
+    /// Construct from pre-split HTTP response parts and a message body.
+    pub fn from_http_parts(parts: http::response::Parts, message: T) -> Self {
         Response {
-            metadata: MetadataMap::from_headers(head.headers),
+            metadata: MetadataMap::from_headers(parts.headers),
             message,
-            extensions: head.extensions,
+            extensions: parts.extensions,
         }
     }
 
@@ -125,5 +130,17 @@ mod tests {
     fn response_from_value() {
         let resp: Response<i32> = 42.into();
         assert_eq!(*resp.get_ref(), 42);
+    }
+
+    #[test]
+    fn response_from_http_parts() {
+        let http_resp = http::Response::builder()
+            .header("x-custom", "value")
+            .body("payload")
+            .unwrap();
+        let (parts, body) = http_resp.into_parts();
+        let resp = Response::from_http_parts(parts, body);
+        assert_eq!(resp.get_ref(), &"payload");
+        assert!(resp.metadata().get("x-custom").is_some());
     }
 }

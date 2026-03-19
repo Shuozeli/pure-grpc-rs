@@ -11,38 +11,46 @@ const DEFAULT_CODEC_PATH: &str = "grpc_core::codec::prost_codec::ProstCodec";
 ///
 /// `package` is the proto package name (e.g., `"helloworld"`).
 /// `proto_path` is the Rust module prefix for types (e.g., `"super"` or `"crate"`).
+/// Convert a protobuf-rs `ServiceDescriptorProto` into a `ServiceDef`.
+///
+/// Returns an error if the service or any of its methods are missing required fields.
+///
+/// Note: `comments` are not populated because proto descriptors carry documentation
+/// in `SourceCodeInfo` (on `FileDescriptorProto`), not on individual descriptors.
+/// Wiring up source comments requires passing the file-level `SourceCodeInfo` and
+/// computing source paths — left for a future codegen enhancement.
 pub fn service_from_proto(
     proto: &ServiceDescriptorProto,
     package: &str,
     proto_path: &str,
-) -> ServiceDef {
+) -> Result<ServiceDef, String> {
     let name = proto
         .name
         .as_deref()
         .filter(|s| !s.is_empty())
-        .expect("service must have a name")
+        .ok_or("service descriptor is missing a name")?
         .to_string();
     let methods = proto
         .method
         .iter()
         .map(|m| method_from_proto(m, proto_path))
-        .collect();
+        .collect::<Result<Vec<_>, _>>()?;
 
-    ServiceDef {
+    Ok(ServiceDef {
         name: name.clone(),
         package: package.to_string(),
         proto_name: name,
         methods,
         comments: vec![],
-    }
+    })
 }
 
-fn method_from_proto(proto: &MethodDescriptorProto, proto_path: &str) -> MethodDef {
+fn method_from_proto(proto: &MethodDescriptorProto, proto_path: &str) -> Result<MethodDef, String> {
     let proto_name = proto
         .name
         .as_deref()
         .filter(|s| !s.is_empty())
-        .expect("method must have a name")
+        .ok_or("method descriptor is missing a name")?
         .to_string();
     let name = proto_name.to_snake_case();
 
@@ -51,7 +59,7 @@ fn method_from_proto(proto: &MethodDescriptorProto, proto_path: &str) -> MethodD
             .input_type
             .as_deref()
             .filter(|s| !s.is_empty())
-            .expect("method must have an input_type"),
+            .ok_or_else(|| format!("method `{proto_name}` is missing an input_type"))?,
         proto_path,
     );
     let output_type = resolve_type(
@@ -59,11 +67,11 @@ fn method_from_proto(proto: &MethodDescriptorProto, proto_path: &str) -> MethodD
             .output_type
             .as_deref()
             .filter(|s| !s.is_empty())
-            .expect("method must have an output_type"),
+            .ok_or_else(|| format!("method `{proto_name}` is missing an output_type"))?,
         proto_path,
     );
 
-    MethodDef {
+    Ok(MethodDef {
         name,
         proto_name,
         input_type,
@@ -72,7 +80,7 @@ fn method_from_proto(proto: &MethodDescriptorProto, proto_path: &str) -> MethodD
         server_streaming: proto.server_streaming.unwrap_or(false),
         codec_path: DEFAULT_CODEC_PATH.to_string(),
         comments: vec![],
-    }
+    })
 }
 
 /// Resolve a proto type reference (e.g., `.helloworld.HelloRequest`) into a Rust type path.
@@ -139,7 +147,7 @@ mod tests {
             options: None,
         };
 
-        let svc = service_from_proto(&proto, "helloworld", "super");
+        let svc = service_from_proto(&proto, "helloworld", "super").unwrap();
 
         assert_eq!(svc.name, "Greeter");
         assert_eq!(svc.package, "helloworld");
@@ -156,5 +164,36 @@ mod tests {
         let m1 = &svc.methods[1];
         assert_eq!(m1.name, "say_hello_stream");
         assert!(m1.server_streaming);
+    }
+
+    #[test]
+    fn service_from_proto_missing_name_is_err() {
+        let proto = ServiceDescriptorProto {
+            name: None,
+            method: vec![],
+            options: None,
+        };
+        let result = service_from_proto(&proto, "pkg", "super");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("missing a name"));
+    }
+
+    #[test]
+    fn method_missing_input_type_is_err() {
+        let proto = ServiceDescriptorProto {
+            name: Some("Svc".into()),
+            method: vec![MethodDescriptorProto {
+                name: Some("Rpc".into()),
+                input_type: None,
+                output_type: Some(".pkg.Out".into()),
+                options: None,
+                client_streaming: None,
+                server_streaming: None,
+            }],
+            options: None,
+        };
+        let result = service_from_proto(&proto, "pkg", "super");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("input_type"));
     }
 }

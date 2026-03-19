@@ -93,22 +93,25 @@ pub struct ReflectionServerBuilder {
 impl ReflectionServerBuilder {
     /// Register an encoded `FileDescriptorSet` (protobuf binary format).
     ///
-    /// Register an encoded `FileDescriptorSet` (protobuf binary format).
-    ///
-    /// # Panics
-    ///
-    /// Panics if `encoded` is not a valid `FileDescriptorSet`. This is typically
-    /// called with compile-time-generated descriptors, so failure indicates a
-    /// build-system bug.
-    pub fn register_encoded_file_descriptor_set(mut self, encoded: &[u8]) -> Self {
+    /// Returns an error if `encoded` cannot be decoded as a valid `FileDescriptorSet`.
+    pub fn register_encoded_file_descriptor_set(
+        mut self,
+        encoded: &[u8],
+    ) -> Result<Self, grpc_core::Status> {
         use prost::Message;
-        let fds = prost_types::FileDescriptorSet::decode(encoded)
-            .expect("invalid FileDescriptorSet: descriptor bytes are corrupt");
+        let fds = prost_types::FileDescriptorSet::decode(encoded).map_err(|e| {
+            grpc_core::Status::internal(format!(
+                "invalid FileDescriptorSet: descriptor bytes are corrupt: {e}"
+            ))
+        })?;
         for file in &fds.file {
             let file_bytes: Arc<[u8]> = {
                 let mut buf = Vec::new();
-                file.encode(&mut buf)
-                    .expect("re-encoding a decoded FileDescriptorProto should never fail");
+                file.encode(&mut buf).map_err(|e| {
+                    grpc_core::Status::internal(format!(
+                        "failed to re-encode FileDescriptorProto: {e}"
+                    ))
+                })?;
                 buf.into()
             };
 
@@ -147,7 +150,7 @@ impl ReflectionServerBuilder {
                 }
             }
         }
-        self
+        Ok(self)
     }
 
     /// Register a service name manually (for services without descriptors).
@@ -386,6 +389,7 @@ mod tests {
 
         let server = ReflectionServer::builder()
             .register_encoded_file_descriptor_set(&encoded)
+            .unwrap()
             .build();
 
         // Top-level message

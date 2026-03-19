@@ -19,6 +19,12 @@ fn response_stream_ident(proto_name: &str) -> proc_macro2::Ident {
 /// - An `XxxServer<T>` wrapper struct implementing `tower::Service`
 /// - Per-method service structs bridging the trait to UnaryService/etc.
 pub fn generate(service: &ServiceDef) -> TokenStream {
+    let errors = service.validate();
+    assert!(
+        errors.is_empty(),
+        "invalid ServiceDef for server codegen: {}",
+        errors.join("; ")
+    );
     let service_name = format_ident!("{}", service.name);
     let server_name = format_ident!("{}Server", service.name);
     let mod_name = format_ident!("{}_server", service.name.to_snake_case());
@@ -326,17 +332,7 @@ mod tests {
         assert!(code.contains("SayHello"), "should contain method path");
     }
 
-    /// Extract all items from the generated module.
-    fn module_items(file: &syn::File) -> &Vec<syn::Item> {
-        let module = file.items.iter().find_map(|item| {
-            if let syn::Item::Mod(m) = item {
-                m.content.as_ref().map(|(_, items)| items)
-            } else {
-                None
-            }
-        });
-        module.expect("generated code should contain a module")
-    }
+    use crate::test_util::module_items;
 
     #[test]
     fn generated_trait_has_expected_methods() {
