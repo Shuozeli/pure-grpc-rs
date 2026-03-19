@@ -9,9 +9,11 @@ Workspace crates:
 - `grpc-core` — Status, Metadata, Codec traits, framing, Body
 - `grpc-server` — Server handler, router, hyper serve loop
 - `grpc-client` — Client dispatcher, Channel, Endpoint
-- `grpc-codegen` — Code generation from service definitions (future)
-- `grpc-build` — build.rs entry point (future)
-- `grpc-codec-flatbuffers` — FlatBuffers codec (future)
+- `grpc-codegen` — Code generation from service definitions (IR + protobuf/flatbuffers adapters)
+- `grpc-build` — build.rs entry point (`compile_protos`, `compile_fbs`)
+- `grpc-codec-flatbuffers` — FlatBuffers codec + `FlatBufferGrpcMessage` trait
+- `grpc-health` — gRPC Health Checking service (Check + Watch RPCs)
+- `grpc-reflection` — gRPC Server Reflection service (v1)
 
 ## Git Rules
 

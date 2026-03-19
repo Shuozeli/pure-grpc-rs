@@ -105,7 +105,8 @@ println!("{}", response.get_ref().message);
 | `grpc-codegen` | Service IR, server/client code generation |
 | `grpc-build` | `compile_protos()` build.rs entry point |
 | `grpc-codec-flatbuffers` | FlatBuffers codec + `FlatBufferGrpcMessage` trait |
-| `grpc-health` | gRPC Health Checking service |
+| `grpc-health` | gRPC Health Checking service (Check + Watch RPCs) |
+| `grpc-reflection` | gRPC Server Reflection service (v1) |
 
 ## Optional Features
 

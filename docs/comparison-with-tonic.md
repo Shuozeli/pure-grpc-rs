@@ -15,25 +15,25 @@
 
 | Component | pure-grpc-rs | tonic | Ratio |
 |-----------|-------------|-------|-------|
-| **Total LOC** | 7,860 | 26,233 | **0.30x** |
-| **Core LOC** | 7,860 | 15,035 | **0.52x** |
+| **Total LOC** | 8,857 | 26,233 | **0.34x** |
+| **Core LOC** | 8,857 | 15,035 | **0.59x** |
 | **Crates** | 10 | 8+ | similar |
-| **Rust files** | 47 | 98 | **0.48x** |
-| **Tests** | 100 | N/A | — |
+| **Rust files** | 49 | 98 | **0.50x** |
+| **Tests** | 103 | N/A | — |
 
 ## Per-Module LOC
 
 | Module | pure-grpc-rs | tonic | Notes |
 |--------|-------------|-------|-------|
-| Status/Code | 699 | 1,091 | Tonic has h2 error mapping, we have io::Error chain walk |
-| Metadata | 160 | 4,286 | Tonic has full phantom-type Ascii/Binary system; we wrap HeaderMap directly |
-| Codec/Framing | 1,141 | 1,461 | Similar — both have encode/decode state machines |
-| Server handler | 1,202 | 645 | We include transport (server.rs); tonic separates it |
-| Client dispatcher | 773 | 540 | We include transport (channel.rs); tonic separates it |
+| Status/Code | 602 | 1,091 | Tonic has h2 error mapping, we have io::Error chain walk |
+| Metadata | 178 | 4,286 | Tonic has full phantom-type Ascii/Binary system; we wrap HeaderMap directly |
+| Codec/Framing | 1,336 | 1,461 | Similar — both have encode/decode state machines |
+| Server handler | 1,272 | 645 | We include transport (server.rs); tonic separates it |
+| Client dispatcher | 840 | 540 | We include transport (channel.rs); tonic separates it |
 | Transport | (embedded) | 5,174 | Tonic has separate transport layer with reconnect, TLS, connection pooling |
-| Codegen | 978 | 1,973 | Tonic has more options (attributes, well-known types, manual builder) |
-| Health | 220 | 951 | Tonic has Watch RPC + generated proto; we have Check only |
-| Reflection | 460 | 1,904 | Tonic supports v1 + v1alpha; we support v1 only |
+| Codegen | 1,484 | 1,973 | Tonic has more options (attributes, well-known types, manual builder) |
+| Health | 366 | 951 | Both have Check + Watch RPCs; tonic uses generated proto |
+| Reflection | 527 | 1,904 | Tonic supports v1 + v1alpha; we support v1 only |
 
 ## Feature Comparison
 
@@ -52,7 +52,7 @@
 | deflate compression | No | Yes |
 | Graceful shutdown | Yes | Yes |
 | Request timeouts | Yes | Yes |
-| Health checking | Yes (Check RPC) | Yes (Check + Watch RPCs) |
+| Health checking | Yes (Check + Watch RPCs) | Yes (Check + Watch RPCs) |
 | Server reflection | Yes (v1) | Yes (v1 + v1alpha) |
 | Interceptors | Yes | Yes |
 | Tower middleware | Yes (via tower::Service) | Yes (via tower::Service) |
@@ -98,11 +98,10 @@ Key difference: pure-grpc-rs has `FlatBuffersCodec` out of the box.
 ## What tonic has that we don't
 1. **gRPC-Web protocol** (tonic-web)
 2. **zstd/deflate compression**
-3. **Health Watch RPC** (streaming health updates)
-4. **Reflection v1alpha** (legacy support)
-5. **Richer error model** (tonic-types, google.rpc.Status details)
-6. **Advanced load balancing** (tonic-xds, round-robin, pick-first)
-7. **Extensive metadata API** (Ascii/Binary phantom types, 4K lines)
+3. **Reflection v1alpha** (legacy support)
+4. **Richer error model** (tonic-types, google.rpc.Status details)
+5. **Advanced load balancing** (tonic-xds, round-robin, pick-first)
+6. **Extensive metadata API** (Ascii/Binary phantom types, 4K lines)
 
 ## What we have that tonic doesn't
 1. **FlatBuffers codec** (pluggable, first-class)

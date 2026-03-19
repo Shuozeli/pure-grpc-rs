@@ -2,6 +2,7 @@
 
 Adversarial audit performed 2026-03-19 (second pass). Merged with prior audit (2026-03-18).
 Phase 3 fixes applied 2026-03-19.
+Doc sync: 2026-03-19 — C1-C4 resolved, H6-H7 resolved, summary table fixed.
 
 ---
 
@@ -30,33 +31,14 @@ Issues found and fixed during the first audit cycle.
 
 ---
 
-## Open — Critical (Blocks CI / Correctness)
+## Resolved — Critical (Phase 3)
 
-### C1. Rustfmt violations across 13+ files
-- `grpc-client/src/endpoint.rs:91, 102, 178`
-- `grpc-client/src/grpc.rs:233, 243`
-- `grpc-codegen/src/server_gen.rs:506`
-- `grpc-core/src/codec/compression.rs:116`
-- `grpc-core/src/metadata.rs:129`
-- `grpc-core/src/status.rs:145, 325`
-- `grpc-reflection/src/lib.rs:389`
-- `grpc-server/src/grpc.rs:425`
-- `examples/greeter-fbs/tests/integration.rs:78`
-- **Fix:** `cargo fmt --all`
-
-### C2. Unused import warning fails clippy
-- `grpc-core/src/body.rs:92` — `use http_body::Body as _;`
-- **Fix:** Remove or use the trait.
-
-### C3. Status code overwritten on message decode failure
-- `grpc-core/src/status.rs:230-235` (`Status::from_header_map`)
-- If `grpc-message` header has invalid UTF-8, the original status code is replaced with `Code::Unknown`.
-- **Fix:** Keep original code: `(code, msg)` instead of `(Code::Unknown, msg)`.
-
-### C4. Server concurrency_limit(0) deadlocks all connections
-- `grpc-server/src/server.rs:62-65`
-- Semaphore with 0 permits blocks everything.
-- **Fix:** Assert `limit > 0` or return Result.
+| # | Issue | Resolution |
+|---|-------|------------|
+| C1 | Rustfmt violations across 13+ files | Fixed: `cargo fmt --all` — passes clean |
+| C2 | Unused import warning fails clippy | Fixed: `use http_body::Body as _` in test code is valid (used for `is_end_stream()`) |
+| C3 | Status code overwritten on message decode failure | Fixed: `status.rs:263-270` keeps original code, only message is degraded |
+| C4 | Server concurrency_limit(0) deadlocks | Fixed: `server.rs:63` asserts `limit > 0` |
 
 ---
 
@@ -92,14 +74,11 @@ Issues found and fixed during the first audit cycle.
 - `grpc-codegen/src/client_gen.rs:85, 89, 93` — `panic!()` via `unwrap_or_else`
 - **Fix:** Standardize on returning `Result` throughout codegen.
 
-### H6. Git dependencies unpinned
-- `grpc-codegen/Cargo.toml` — `protoc-rs-schema`, `flatc-rs-schema`
-- `grpc-build/Cargo.toml` — 4+ git deps, all unpinned
-- **Fix:** Add `branch = "main"` per dependency management rules.
+### ~~H6. Git dependencies unpinned~~ (Resolved)
+- Fixed: all git deps in `grpc-codegen/Cargo.toml` and `grpc-build/Cargo.toml` now have `branch = "main"`.
 
-### H7. Clippy not run with --all-features in CI
-- `.github/workflows/ci.yml`
-- **Fix:** Add `cargo clippy --workspace --all-features -- -D warnings` step.
+### ~~H7. Clippy not run with --all-features in CI~~ (Resolved)
+- Fixed: `.github/workflows/ci.yml` now has `cargo clippy --workspace --all-features -- -D warnings`.
 
 ### H8. Metadata cloned on every status serialization
 - `grpc-core/src/status.rs:281-282`
@@ -174,19 +153,10 @@ Issues found and fixed during the first audit cycle.
 
 ## Summary
 
-| | Resolved | Open |
-|--|----------|------|
-| Critical | 4 | 0 |
-| High | 8 | 0 |
-| Medium | 22 | 2 (deliberate scope) |
+| Severity | Resolved | Open |
+|----------|----------|------|
+| Critical | 20 (16 prior + 4 phase 3) | 0 |
+| High | 10 (8 prior + H6, H7) | 6 (H1-H5, H8) |
+| Medium | 22 | 2 (deliberate scope limits) |
 | Low | 6 | 11 (not worth changing) |
-| Architecture | 1 | 0 | 4 | 0 | 0 |
-| Silent Failures | 3 | 1 | 0 | 3 | 0 |
-| Validation | 0 | 1 | 0 | 6 | 0 |
-| Performance | 1 | 0 | 1 | 6 | 0 |
-| Incomplete | 2 | 0 | 0 | 4 | 0 |
-| Duplication | 1 | 0 | 1 | 0 | 5 |
-| Build / Config | 0 | 0 | 2 | 0 | 2 |
-| Code Quality | 3 | 0 | 0 | 0 | 8 |
-| Tests | 0 | 0 | 0 | 0 | 4 |
-| **Total** | **16** | **4** | **8** | **24** | **17** |
+| **Total** | **58** | **19** |
