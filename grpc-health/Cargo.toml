@@ -6,15 +6,20 @@ description = "Part of pure-grpc-rs: a pure Rust gRPC framework with pluggable c
 repository = "https://github.com/Shuozeli/pure-grpc-rs"
 license = "MIT"
 
+[features]
+default = ["prost-codec"]
+prost-codec = ["prost", "grpc-core/prost-codec"]
+
 [dependencies]
-grpc-core = { path = "../grpc-core" }
+grpc-core = { path = "../grpc-core", default-features = false }
 grpc-server = { path = "../grpc-server" }
-prost = "0.13"
+prost = { version = "0.13", optional = true }
 bytes = "1"
 http = "1"
 http-body = "1"
 tower-service = "0.3"
 tokio = { version = "1", features = ["sync"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

@@ -52,6 +52,7 @@ where
 ///
 /// Wraps an inner transport service and handles encoding/decoding of
 /// gRPC messages for all four RPC patterns.
+#[derive(Clone)]
 pub struct Grpc<T> {
     inner: T,
     origin: Uri,
@@ -211,7 +212,7 @@ impl<T> Grpc<T> {
             })
             .map(Body::new);
 
-        let request = self.prepare_request(request, path);
+        let request = self.prepare_request(request, path)?;
 
         let response = self
             .inner
@@ -223,7 +224,11 @@ impl<T> Grpc<T> {
         self.create_response(decoder, response)
     }
 
-    fn prepare_request(&self, request: Request<Body>, path: PathAndQuery) -> http::Request<Body> {
+    fn prepare_request(
+        &self,
+        request: Request<Body>,
+        path: PathAndQuery,
+    ) -> Result<http::Request<Body>, Status> {
         let mut parts = self.origin.clone().into_parts();
 
         match &parts.path_and_query {
@@ -231,7 +236,7 @@ impl<T> Grpc<T> {
                 parts.path_and_query = Some(
                     format!("{}{}", pnq.path(), path)
                         .parse()
-                        .expect("must form valid path_and_query"),
+                        .map_err(|e| Status::internal(format!("invalid path_and_query: {e}")))?,
                 );
             }
             _ => {
@@ -239,7 +244,8 @@ impl<T> Grpc<T> {
             }
         }
 
-        let uri = Uri::from_parts(parts).expect("path_and_query only is valid Uri");
+        let uri =
+            Uri::from_parts(parts).map_err(|e| Status::internal(format!("invalid URI: {e}")))?;
 
         let mut request = request.into_http(
             uri,
@@ -270,7 +276,7 @@ impl<T> Grpc<T> {
                 .insert(ACCEPT_ENCODING_HEADER, header_value);
         }
 
-        request
+        Ok(request)
     }
 
     fn create_response<M2>(
@@ -318,24 +324,18 @@ impl<T> Grpc<T> {
     }
 }
 
-impl<T: Clone> Clone for Grpc<T> {
-    fn clone(&self) -> Self {
-        Self {
-            inner: self.inner.clone(),
-            origin: self.origin.clone(),
-            accept_compression_encodings: self.accept_compression_encodings,
-            send_compression_encoding: self.send_compression_encoding,
-            max_decoding_message_size: self.max_decoding_message_size,
-            max_encoding_message_size: self.max_encoding_message_size,
-        }
-    }
-}
-
 impl<T: fmt::Debug> fmt::Debug for Grpc<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Grpc")
             .field("inner", &self.inner)
             .field("origin", &self.origin)
+            .field(
+                "accept_compression_encodings",
+                &self.accept_compression_encodings,
+            )
+            .field("send_compression_encoding", &self.send_compression_encoding)
+            .field("max_decoding_message_size", &self.max_decoding_message_size)
+            .field("max_encoding_message_size", &self.max_encoding_message_size)
             .finish()
     }
 }
@@ -369,7 +369,7 @@ mod tests {
         let req = Request::new(Body::empty());
         let path: PathAndQuery = "/test.Svc/Method".parse().unwrap();
 
-        let http_req = grpc.prepare_request(req, path);
+        let http_req = grpc.prepare_request(req, path).unwrap();
 
         assert_eq!(http_req.method(), http::Method::POST);
         assert_eq!(http_req.uri().path(), "/test.Svc/Method");
@@ -386,7 +386,7 @@ mod tests {
         let req = Request::new(Body::empty());
         let path: PathAndQuery = "/test.Svc/Method".parse().unwrap();
 
-        let http_req = grpc.prepare_request(req, path);
+        let http_req = grpc.prepare_request(req, path).unwrap();
         assert_eq!(http_req.uri().path(), "/prefix/test.Svc/Method");
     }
 
@@ -402,7 +402,7 @@ mod tests {
         let req = Request::new(Body::empty());
         let path: PathAndQuery = "/test.Svc/Method".parse().unwrap();
 
-        let http_req = grpc.prepare_request(req, path);
+        let http_req = grpc.prepare_request(req, path).unwrap();
 
         assert_eq!(http_req.headers().get("grpc-encoding").unwrap(), "gzip");
         assert_eq!(

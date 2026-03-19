@@ -1,24 +1,23 @@
 use grpc_core::body::Body;
+use grpc_core::BoxFuture;
 use http::{Request, Response};
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;
-use std::future::Future;
-use std::pin::Pin;
 use std::task::{Context, Poll};
+use std::time::Duration;
 use tower_service::Service;
-
-type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
 type BoxError = Box<dyn std::error::Error + Send + Sync + 'static>;
 
 /// A gRPC channel (HTTP/2 client connection).
 ///
 /// Cloning is cheap — all clones share the same underlying HTTP/2 connection.
 ///
-/// For TLS connections, use [`Channel::connect_tls`] (requires `tls` feature).
+/// For TLS connections, use `Channel::connect_tls` (requires `tls` feature).
 #[derive(Clone)]
 pub struct Channel {
     inner: ChannelInner,
     uri: http::Uri,
+    timeout: Option<Duration>,
 }
 
 #[derive(Clone)]
@@ -44,7 +43,16 @@ impl Channel {
         Ok(Channel {
             inner: ChannelInner::Http(client),
             uri,
+            timeout: None,
         })
+    }
+
+    /// Set a per-request timeout on this channel.
+    ///
+    /// Requests that exceed this duration return a `DeadlineExceeded` error.
+    pub fn with_timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = Some(timeout);
+        self
     }
 
     /// Create a new channel for TLS-encrypted HTTP/2 connections.
@@ -77,6 +85,7 @@ impl Channel {
         Ok(Channel {
             inner: ChannelInner::Https(client),
             uri,
+            timeout: None,
         })
     }
 
@@ -130,7 +139,9 @@ impl Service<Request<Body>> for Channel {
     }
 
     fn call(&mut self, req: Request<Body>) -> Self::Future {
-        match &self.inner {
+        let timeout = self.timeout;
+
+        let fut = match &self.inner {
             ChannelInner::Http(client) => {
                 let client = client.clone();
                 Box::pin(async move {
@@ -139,7 +150,7 @@ impl Service<Request<Body>> for Channel {
                         .await
                         .map_err(|e| -> BoxError { Box::new(e) })?;
                     Ok(resp.map(Body::new))
-                })
+                }) as BoxFuture<Result<Response<Body>, BoxError>>
             }
             #[cfg(feature = "tls")]
             ChannelInner::Https(client) => {
@@ -152,6 +163,18 @@ impl Service<Request<Body>> for Channel {
                     Ok(resp.map(Body::new))
                 })
             }
+        };
+
+        match timeout {
+            Some(duration) => Box::pin(async move {
+                match tokio::time::timeout(duration, fut).await {
+                    Ok(result) => result,
+                    Err(_elapsed) => Err(Box::new(grpc_core::Status::deadline_exceeded(
+                        "channel request timed out",
+                    )) as BoxError),
+                }
+            }),
+            None => fut,
         }
     }
 }

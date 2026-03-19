@@ -222,7 +222,7 @@ dependencies = [
 [[package]]
 name = "flatc-rs-annotator"
 version = "0.1.0"
-source = "git+https://github.com/shuozeli/flatbuffers-rs.git#bd3a9fc7da16437cec25e15397b56851384f9698"
+source = "git+https://github.com/shuozeli/flatbuffers-rs.git?branch=main#bd3a9fc7da16437cec25e15397b56851384f9698"
 dependencies = [
  "flatc-rs-schema",
  "thiserror",
@@ -231,7 +231,7 @@ dependencies = [
 [[package]]
 name = "flatc-rs-codegen"
 version = "0.1.0"
-source = "git+https://github.com/shuozeli/flatbuffers-rs.git#bd3a9fc7da16437cec25e15397b56851384f9698"
+source = "git+https://github.com/shuozeli/flatbuffers-rs.git?branch=main#bd3a9fc7da16437cec25e15397b56851384f9698"
 dependencies = [
  "flatc-rs-schema",
  "thiserror",
@@ -240,7 +240,7 @@ dependencies = [
 [[package]]
 name = "flatc-rs-compiler"
 version = "0.1.0"
-source = "git+https://github.com/shuozeli/flatbuffers-rs.git#bd3a9fc7da16437cec25e15397b56851384f9698"
+source = "git+https://github.com/shuozeli/flatbuffers-rs.git?branch=main#bd3a9fc7da16437cec25e15397b56851384f9698"
 dependencies = [
  "clap",
  "flatbuffers",
@@ -255,7 +255,7 @@ dependencies = [
 [[package]]
 name = "flatc-rs-parser"
 version = "0.1.0"
-source = "git+https://github.com/shuozeli/flatbuffers-rs.git#bd3a9fc7da16437cec25e15397b56851384f9698"
+source = "git+https://github.com/shuozeli/flatbuffers-rs.git?branch=main#bd3a9fc7da16437cec25e15397b56851384f9698"
 dependencies = [
  "flatc-rs-schema",
  "thiserror",
@@ -264,7 +264,7 @@ dependencies = [
 [[package]]
 name = "flatc-rs-schema"
 version = "0.1.0"
-source = "git+https://github.com/shuozeli/flatbuffers-rs.git#bd3a9fc7da16437cec25e15397b56851384f9698"
+source = "git+https://github.com/shuozeli/flatbuffers-rs.git?branch=main#bd3a9fc7da16437cec25e15397b56851384f9698"
 dependencies = [
  "serde",
 ]
@@ -488,6 +488,7 @@ dependencies = [
  "http-body",
  "prost",
  "tokio",
+ "tokio-stream",
  "tower-service",
 ]
 
@@ -512,6 +513,7 @@ name = "grpc-server"
 version = "0.1.0"
 dependencies = [
  "bytes",
+ "flate2",
  "grpc-core",
  "http",
  "http-body",
@@ -899,7 +901,7 @@ dependencies = [
 [[package]]
 name = "protoc-rs-analyzer"
 version = "0.1.0"
-source = "git+https://github.com/shuozeli/protobuf-rs.git#1a337b2d8ba57ea06dcb33561fc37e85bb76b290"
+source = "git+https://github.com/shuozeli/protobuf-rs.git?branch=main#1a337b2d8ba57ea06dcb33561fc37e85bb76b290"
 dependencies = [
  "protoc-rs-parser",
  "protoc-rs-schema",
@@ -908,7 +910,7 @@ dependencies = [
 [[package]]
 name = "protoc-rs-annotator"
 version = "0.1.0"
-source = "git+https://github.com/shuozeli/protobuf-rs.git#1a337b2d8ba57ea06dcb33561fc37e85bb76b290"
+source = "git+https://github.com/shuozeli/protobuf-rs.git?branch=main#1a337b2d8ba57ea06dcb33561fc37e85bb76b290"
 dependencies = [
  "protoc-rs-schema",
  "thiserror",
@@ -917,7 +919,7 @@ dependencies = [
 [[package]]
 name = "protoc-rs-codegen"
 version = "0.1.0"
-source = "git+https://github.com/shuozeli/protobuf-rs.git#1a337b2d8ba57ea06dcb33561fc37e85bb76b290"
+source = "git+https://github.com/shuozeli/protobuf-rs.git?branch=main#1a337b2d8ba57ea06dcb33561fc37e85bb76b290"
 dependencies = [
  "heck",
  "protoc-rs-schema",
@@ -926,7 +928,7 @@ dependencies = [
 [[package]]
 name = "protoc-rs-compiler"
 version = "0.1.0"
-source = "git+https://github.com/shuozeli/protobuf-rs.git#1a337b2d8ba57ea06dcb33561fc37e85bb76b290"
+source = "git+https://github.com/shuozeli/protobuf-rs.git?branch=main#1a337b2d8ba57ea06dcb33561fc37e85bb76b290"
 dependencies = [
  "protoc-rs-analyzer",
  "protoc-rs-annotator",
@@ -938,7 +940,7 @@ dependencies = [
 [[package]]
 name = "protoc-rs-parser"
 version = "0.1.0"
-source = "git+https://github.com/shuozeli/protobuf-rs.git#1a337b2d8ba57ea06dcb33561fc37e85bb76b290"
+source = "git+https://github.com/shuozeli/protobuf-rs.git?branch=main#1a337b2d8ba57ea06dcb33561fc37e85bb76b290"
 dependencies = [
  "protoc-rs-schema",
 ]
@@ -946,7 +948,7 @@ dependencies = [
 [[package]]
 name = "protoc-rs-schema"
 version = "0.1.0"
-source = "git+https://github.com/shuozeli/protobuf-rs.git#1a337b2d8ba57ea06dcb33561fc37e85bb76b290"
+source = "git+https://github.com/shuozeli/protobuf-rs.git?branch=main#1a337b2d8ba57ea06dcb33561fc37e85bb76b290"
 
 [[package]]
 name = "quote"
@@ -1321,6 +1323,7 @@ dependencies = [
  "futures-core",
  "pin-project-lite",
  "tokio",
+ "tokio-util",
 ]
 
 [[package]]

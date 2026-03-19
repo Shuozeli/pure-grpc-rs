@@ -4,16 +4,10 @@ use greeter_proto::greeter_client::GreeterClient;
 use greeter_proto::greeter_server::{Greeter, GreeterServer};
 use greeter_proto::{HelloReply, HelloRequest};
 use grpc_client::Channel;
-use grpc_core::{Request, Response, Status, Streaming};
+use grpc_core::{BoxFuture, BoxStream, Request, Response, Status, Streaming};
 use grpc_server::{NamedService, Router, Server};
-use std::future::Future;
 use std::net::SocketAddr;
-use std::pin::Pin;
 use tokio::net::TcpListener;
-use tokio_stream::Stream;
-
-type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
-type BoxStream<T> = Pin<Box<dyn Stream<Item = T> + Send + 'static>>;
 
 // --- Test service implementation ---
 
@@ -32,12 +26,12 @@ impl Greeter for TestGreeter {
         })
     }
 
-    type SayHelloServerStreamStream = BoxStream<Result<HelloReply, Status>>;
+    type SayHelloServerStreamResponseStream = BoxStream<Result<HelloReply, Status>>;
 
     fn say_hello_server_stream(
         &self,
         request: Request<HelloRequest>,
-    ) -> BoxFuture<Result<Response<Self::SayHelloServerStreamStream>, Status>> {
+    ) -> BoxFuture<Result<Response<Self::SayHelloServerStreamResponseStream>, Status>> {
         let name = request.into_inner().name;
         Box::pin(async move {
             let stream = tokio_stream::iter((0..3).map(move |i| {
@@ -65,12 +59,12 @@ impl Greeter for TestGreeter {
         })
     }
 
-    type SayHelloBidiStreamStream = BoxStream<Result<HelloReply, Status>>;
+    type SayHelloBidiStreamResponseStream = BoxStream<Result<HelloReply, Status>>;
 
     fn say_hello_bidi_stream(
         &self,
         request: Request<Streaming<HelloRequest>>,
-    ) -> BoxFuture<Result<Response<Self::SayHelloBidiStreamStream>, Status>> {
+    ) -> BoxFuture<Result<Response<Self::SayHelloBidiStreamResponseStream>, Status>> {
         Box::pin(async move {
             let mut input = request.into_inner();
             let (tx, rx) = tokio::sync::mpsc::channel(32);
@@ -90,6 +84,17 @@ impl Greeter for TestGreeter {
     }
 }
 
+/// Wait until the server is accepting connections.
+async fn wait_for_server(addr: SocketAddr) {
+    for _ in 0..200 {
+        if tokio::net::TcpStream::connect(addr).await.is_ok() {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    panic!("server at {addr} did not become ready within 2s");
+}
+
 /// Start server on random port, return the address.
 async fn start_server() -> SocketAddr {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -105,8 +110,7 @@ async fn start_server() -> SocketAddr {
             .unwrap();
     });
 
-    // Give server a moment to start accepting
-    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    wait_for_server(addr).await;
     addr
 }
 
@@ -234,7 +238,7 @@ async fn health_check_integration() {
             .await
             .unwrap();
     });
-    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    wait_for_server(addr).await;
 
     // Use raw Grpc client to call health check
     let uri: http::Uri = format!("http://{addr}").parse().unwrap();
@@ -280,16 +284,8 @@ async fn server_timeout_enforcement() {
     impl tower_service::Service<http::Request<grpc_core::body::Body>> for SlowService {
         type Response = http::Response<grpc_core::body::Body>;
         type Error = std::convert::Infallible;
-        type Future = Pin<
-            Box<
-                dyn Future<
-                        Output = Result<
-                            http::Response<grpc_core::body::Body>,
-                            std::convert::Infallible,
-                        >,
-                    > + Send,
-            >,
-        >;
+        type Future =
+            BoxFuture<Result<http::Response<grpc_core::body::Body>, std::convert::Infallible>>;
 
         fn poll_ready(
             &mut self,
@@ -316,7 +312,7 @@ async fn server_timeout_enforcement() {
             .await
             .unwrap();
     });
-    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    wait_for_server(addr).await;
 
     let mut client = connect(addr).await;
 
@@ -357,7 +353,7 @@ async fn interceptor_rejects_unauthenticated() {
             .await
             .unwrap();
     });
-    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    wait_for_server(addr).await;
 
     // Without auth — should be rejected
     let mut client = connect(addr).await;
@@ -405,7 +401,7 @@ async fn reflection_lists_services() {
             .await
             .unwrap();
     });
-    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    wait_for_server(addr).await;
 
     // Use raw streaming client to call reflection
     let uri: http::Uri = format!("http://{addr}").parse().unwrap();

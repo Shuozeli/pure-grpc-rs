@@ -62,11 +62,13 @@ where
     }
 
     pub fn max_decoding_message_size(mut self, limit: usize) -> Self {
+        assert!(limit > 0, "max message size must be > 0");
         self.max_decoding_message_size = Some(limit);
         self
     }
 
     pub fn max_encoding_message_size(mut self, limit: usize) -> Self {
+        assert!(limit > 0, "max message size must be > 0");
         self.max_encoding_message_size = Some(limit);
         self
     }
@@ -89,12 +91,7 @@ where
 
         let request = match self.map_request_unary(req).await {
             Ok(r) => r,
-            Err(status) => {
-                return self.map_response::<tokio_stream::Once<Result<T::Encode, Status>>>(
-                    Err(status),
-                    accept_encoding,
-                );
-            }
+            Err(status) => return status.into_http(),
         };
 
         let response = service
@@ -124,9 +121,7 @@ where
 
         let request = match self.map_request_unary(req).await {
             Ok(r) => r,
-            Err(status) => {
-                return self.map_response::<S::ResponseStream>(Err(status), accept_encoding);
-            }
+            Err(status) => return status.into_http(),
         };
 
         let response = service.call(request).await;
@@ -386,5 +381,52 @@ mod tests {
         let grpc = Grpc::new(TestCodec);
         let debug = format!("{grpc:?}");
         assert!(debug.contains("Grpc"));
+    }
+
+    #[cfg(feature = "gzip")]
+    fn build_gzip_grpc_request(
+        payload: &[u8],
+    ) -> http::Request<http_body_util::Full<bytes::Bytes>> {
+        use flate2::write::GzEncoder;
+        use std::io::Write;
+
+        let mut encoder = GzEncoder::new(Vec::new(), flate2::Compression::default());
+        encoder.write_all(payload).unwrap();
+        let compressed = encoder.finish().unwrap();
+
+        let mut buf = BytesMut::new();
+        buf.put_u8(1); // compressed
+        buf.put_u32(compressed.len() as u32);
+        buf.put_slice(&compressed);
+
+        http::Request::builder()
+            .method(http::Method::POST)
+            .uri("/test.TestService/Echo")
+            .header("content-type", "application/grpc")
+            .header("grpc-encoding", "gzip")
+            .header("grpc-accept-encoding", "gzip")
+            .body(http_body_util::Full::new(buf.freeze()))
+            .unwrap()
+    }
+
+    #[cfg(feature = "gzip")]
+    #[tokio::test]
+    async fn unary_gzip_compressed_request() {
+        use grpc_core::codec::compression::CompressionEncoding;
+
+        let mut grpc = Grpc::new(TestCodec)
+            .accept_compressed(CompressionEncoding::Gzip)
+            .send_compressed(CompressionEncoding::Gzip);
+
+        let req = build_gzip_grpc_request(b"compressed-hello");
+        let response = grpc.unary(EchoService, req).await;
+
+        assert_eq!(response.status(), http::StatusCode::OK);
+        assert_eq!(
+            response.headers().get("content-type").unwrap(),
+            "application/grpc"
+        );
+        // Server should indicate gzip encoding in response
+        assert_eq!(response.headers().get("grpc-encoding").unwrap(), "gzip");
     }
 }

@@ -1,14 +1,8 @@
 use greeter_proto::greeter_server::{Greeter, GreeterServer};
 use greeter_proto::{HelloReply, HelloRequest};
-use grpc_core::{Request, Response, Status, Streaming};
+use grpc_core::{BoxFuture, BoxStream, Request, Response, Status, Streaming};
 use grpc_server::{NamedService, Router, Server};
-use std::future::Future;
 use std::net::SocketAddr;
-use std::pin::Pin;
-use tokio_stream::Stream;
-
-type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
-type BoxStream<T> = Pin<Box<dyn Stream<Item = T> + Send + 'static>>;
 
 struct MyGreeter;
 
@@ -24,12 +18,12 @@ impl Greeter for MyGreeter {
         Box::pin(async move { Ok(Response::new(reply)) })
     }
 
-    type SayHelloServerStreamStream = BoxStream<Result<HelloReply, Status>>;
+    type SayHelloServerStreamResponseStream = BoxStream<Result<HelloReply, Status>>;
 
     fn say_hello_server_stream(
         &self,
         request: Request<HelloRequest>,
-    ) -> BoxFuture<Result<Response<Self::SayHelloServerStreamStream>, Status>> {
+    ) -> BoxFuture<Result<Response<Self::SayHelloServerStreamResponseStream>, Status>> {
         let name = request.into_inner().name;
         let stream = tokio_stream::iter((0..3).map(move |i| {
             Ok(HelloReply {
@@ -56,12 +50,12 @@ impl Greeter for MyGreeter {
         })
     }
 
-    type SayHelloBidiStreamStream = BoxStream<Result<HelloReply, Status>>;
+    type SayHelloBidiStreamResponseStream = BoxStream<Result<HelloReply, Status>>;
 
     fn say_hello_bidi_stream(
         &self,
         request: Request<Streaming<HelloRequest>>,
-    ) -> BoxFuture<Result<Response<Self::SayHelloBidiStreamStream>, Status>> {
+    ) -> BoxFuture<Result<Response<Self::SayHelloBidiStreamResponseStream>, Status>> {
         Box::pin(async move {
             let mut input = request.into_inner();
             let (tx, rx) = tokio::sync::mpsc::channel(32);

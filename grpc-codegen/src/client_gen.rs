@@ -1,4 +1,4 @@
-use crate::ir::{MethodDef, ServiceDef};
+use crate::ir::{comments_to_doc_tokens, MethodDef, ServiceDef};
 use heck::ToSnakeCase;
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
@@ -11,6 +11,7 @@ pub fn generate(service: &ServiceDef) -> TokenStream {
     let mod_name = format_ident!("{}_client", service.name.to_snake_case());
     let fqn = service.fully_qualified_name();
 
+    let service_docs = comments_to_doc_tokens(&service.comments);
     let connect_method = gen_connect_method(&client_name);
     let rpc_methods = service.methods.iter().map(|m| gen_rpc_method(m, &fqn));
 
@@ -25,6 +26,7 @@ pub fn generate(service: &ServiceDef) -> TokenStream {
             use http::uri::PathAndQuery;
             use http_body::Body as HttpBody;
 
+            #service_docs
             #[derive(Debug, Clone)]
             pub struct #client_name<T> {
                 inner: Grpc<T>,
@@ -73,12 +75,22 @@ fn gen_connect_method(client_name: &proc_macro2::Ident) -> TokenStream {
 }
 
 fn gen_rpc_method(method: &MethodDef, service_fqn: &str) -> TokenStream {
+    let method_docs = comments_to_doc_tokens(&method.comments);
     let name = format_ident!("{}", method.name);
     let path = method.grpc_path(service_fqn);
     let proto_name = &method.proto_name;
-    let codec_path: TokenStream = method.codec_path.parse().unwrap();
-    let input: TokenStream = method.input_type.parse().unwrap();
-    let output: TokenStream = method.output_type.parse().unwrap();
+    let codec_path: TokenStream = method
+        .codec_path
+        .parse()
+        .unwrap_or_else(|e| panic!("invalid codec_path `{}`: {e}", method.codec_path));
+    let input: TokenStream = method
+        .input_type
+        .parse()
+        .unwrap_or_else(|e| panic!("invalid input_type `{}`: {e}", method.input_type));
+    let output: TokenStream = method
+        .output_type
+        .parse()
+        .unwrap_or_else(|e| panic!("invalid output_type `{}`: {e}", method.output_type));
     let service_fqn_str = service_fqn;
 
     let ready_check = quote! {
@@ -92,6 +104,7 @@ fn gen_rpc_method(method: &MethodDef, service_fqn: &str) -> TokenStream {
         (false, false) => {
             // Unary
             quote! {
+                #method_docs
                 pub async fn #name(
                     &mut self,
                     request: impl IntoRequest<#input>,
@@ -109,6 +122,7 @@ fn gen_rpc_method(method: &MethodDef, service_fqn: &str) -> TokenStream {
         (false, true) => {
             // Server streaming
             quote! {
+                #method_docs
                 pub async fn #name(
                     &mut self,
                     request: impl IntoRequest<#input>,
@@ -126,6 +140,7 @@ fn gen_rpc_method(method: &MethodDef, service_fqn: &str) -> TokenStream {
         (true, false) => {
             // Client streaming
             quote! {
+                #method_docs
                 pub async fn #name(
                     &mut self,
                     request: impl IntoStreamingRequest<Message = #input>,
@@ -143,6 +158,7 @@ fn gen_rpc_method(method: &MethodDef, service_fqn: &str) -> TokenStream {
         (true, true) => {
             // Bidi streaming
             quote! {
+                #method_docs
                 pub async fn #name(
                     &mut self,
                     request: impl IntoStreamingRequest<Message = #input>,
@@ -207,5 +223,114 @@ mod tests {
         );
         assert!(code.contains("say_hello"), "should contain method");
         assert!(code.contains("connect"), "should contain connect method");
+    }
+
+    /// Extract all items from the generated module.
+    fn module_items(file: &syn::File) -> &Vec<syn::Item> {
+        let module = file.items.iter().find_map(|item| {
+            if let syn::Item::Mod(m) = item {
+                m.content.as_ref().map(|(_, items)| items)
+            } else {
+                None
+            }
+        });
+        module.expect("generated code should contain a module")
+    }
+
+    #[test]
+    fn generated_client_has_expected_methods() {
+        let svc = sample_service();
+        let tokens = generate(&svc);
+        let file: syn::File = syn::parse2(tokens).unwrap();
+        let items = module_items(&file);
+
+        // Collect all method names from impl blocks
+        let method_names: Vec<String> = items
+            .iter()
+            .filter_map(|item| {
+                if let syn::Item::Impl(imp) = item {
+                    Some(imp)
+                } else {
+                    None
+                }
+            })
+            .flat_map(|imp| &imp.items)
+            .filter_map(|item| {
+                if let syn::ImplItem::Fn(m) = item {
+                    Some(m.sig.ident.to_string())
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        assert!(
+            method_names.contains(&"say_hello".to_string()),
+            "client should have say_hello method, got: {method_names:?}"
+        );
+        assert!(
+            method_names.contains(&"connect".to_string()),
+            "client should have connect method, got: {method_names:?}"
+        );
+    }
+
+    #[test]
+    fn all_four_rpc_patterns_generate_parseable_code() {
+        let svc = ServiceDef {
+            name: "TestSvc".into(),
+            package: "test".into(),
+            proto_name: "TestSvc".into(),
+            comments: vec![],
+            methods: vec![
+                MethodDef {
+                    name: "unary".into(),
+                    proto_name: "Unary".into(),
+                    input_type: "super::Req".into(),
+                    output_type: "super::Resp".into(),
+                    client_streaming: false,
+                    server_streaming: false,
+                    codec_path: "Codec".into(),
+                    comments: vec![],
+                },
+                MethodDef {
+                    name: "server_stream".into(),
+                    proto_name: "ServerStream".into(),
+                    input_type: "super::Req".into(),
+                    output_type: "super::Resp".into(),
+                    client_streaming: false,
+                    server_streaming: true,
+                    codec_path: "Codec".into(),
+                    comments: vec![],
+                },
+                MethodDef {
+                    name: "client_stream".into(),
+                    proto_name: "ClientStream".into(),
+                    input_type: "super::Req".into(),
+                    output_type: "super::Resp".into(),
+                    client_streaming: true,
+                    server_streaming: false,
+                    codec_path: "Codec".into(),
+                    comments: vec![],
+                },
+                MethodDef {
+                    name: "bidi".into(),
+                    proto_name: "Bidi".into(),
+                    input_type: "super::Req".into(),
+                    output_type: "super::Resp".into(),
+                    client_streaming: true,
+                    server_streaming: true,
+                    codec_path: "Codec".into(),
+                    comments: vec![],
+                },
+            ],
+        };
+
+        let tokens = generate(&svc);
+        let file = syn::parse2::<syn::File>(tokens);
+        assert!(
+            file.is_ok(),
+            "all 4 RPC patterns should generate parseable code: {:?}",
+            file.err()
+        );
     }
 }

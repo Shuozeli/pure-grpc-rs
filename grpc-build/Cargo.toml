@@ -28,14 +28,14 @@ prettyplease = "0.2"
 syn = "2"
 proc-macro2 = "1"
 
-protoc-rs-parser = { git = "https://github.com/shuozeli/protobuf-rs.git", optional = true }
-protoc-rs-analyzer = { git = "https://github.com/shuozeli/protobuf-rs.git", optional = true }
-protoc-rs-codegen = { git = "https://github.com/shuozeli/protobuf-rs.git", optional = true }
-protoc-rs-compiler = { git = "https://github.com/shuozeli/protobuf-rs.git", optional = true }
-protoc-rs-schema = { git = "https://github.com/shuozeli/protobuf-rs.git", optional = true }
+protoc-rs-parser = { git = "https://github.com/shuozeli/protobuf-rs.git", branch = "main", optional = true }
+protoc-rs-analyzer = { git = "https://github.com/shuozeli/protobuf-rs.git", branch = "main", optional = true }
+protoc-rs-codegen = { git = "https://github.com/shuozeli/protobuf-rs.git", branch = "main", optional = true }
+protoc-rs-compiler = { git = "https://github.com/shuozeli/protobuf-rs.git", branch = "main", optional = true }
+protoc-rs-schema = { git = "https://github.com/shuozeli/protobuf-rs.git", branch = "main", optional = true }
 
-flatc-rs-compiler = { git = "https://github.com/shuozeli/flatbuffers-rs.git", optional = true }
-flatc-rs-codegen = { git = "https://github.com/shuozeli/flatbuffers-rs.git", optional = true }
+flatc-rs-compiler = { git = "https://github.com/shuozeli/flatbuffers-rs.git", branch = "main", optional = true }
+flatc-rs-codegen = { git = "https://github.com/shuozeli/flatbuffers-rs.git", branch = "main", optional = true }
 
 [dev-dependencies]
 tempfile = "3"

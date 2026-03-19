@@ -1,19 +1,23 @@
-use std::{pin::Pin, task::Poll};
+use http_body::Body as HttpBody;
+use std::fmt;
+use std::pin::Pin;
+use std::task::Poll;
 
-use http_body_util::BodyExt as _;
-
-type BoxBody = http_body_util::combinators::UnsyncBoxBody<bytes::Bytes, crate::Status>;
+/// A Send-only type-erased body. Unlike `http_body_util::BoxBody` (which
+/// requires `Send + Sync`) or `UnsyncBoxBody` (which requires neither),
+/// this requires exactly `Send` — matching the bounds that tower services
+/// and tokio::spawn actually need.
+type SendBoxBody =
+    Pin<Box<dyn HttpBody<Data = bytes::Bytes, Error = crate::Status> + Send + 'static>>;
 
 /// A type-erased HTTP body used throughout the gRPC framework.
-#[derive(Debug)]
 pub struct Body {
     kind: Kind,
 }
 
-#[derive(Debug)]
 enum Kind {
     Empty,
-    Wrap(BoxBody),
+    Wrap(SendBoxBody),
 }
 
 impl Body {
@@ -23,16 +27,17 @@ impl Body {
 
     pub fn new<B>(body: B) -> Self
     where
-        B: http_body::Body<Data = bytes::Bytes> + Send + 'static,
+        B: HttpBody<Data = bytes::Bytes> + Send + 'static,
         B::Error: Into<crate::BoxError>,
     {
         if body.is_end_stream() {
             return Self::empty();
         }
 
-        let body = body.map_err(crate::Status::map_error).boxed_unsync();
+        use http_body_util::BodyExt as _;
+        let body = body.map_err(crate::Status::map_error);
         Self {
-            kind: Kind::Wrap(body),
+            kind: Kind::Wrap(Box::pin(body)),
         }
     }
 }
@@ -43,7 +48,7 @@ impl Default for Body {
     }
 }
 
-impl http_body::Body for Body {
+impl HttpBody for Body {
     type Data = bytes::Bytes;
     type Error = crate::Status;
 
@@ -53,7 +58,7 @@ impl http_body::Body for Body {
     ) -> Poll<Option<Result<http_body::Frame<Self::Data>, Self::Error>>> {
         match &mut self.kind {
             Kind::Empty => Poll::Ready(None),
-            Kind::Wrap(body) => Pin::new(body).poll_frame(cx),
+            Kind::Wrap(body) => body.as_mut().poll_frame(cx),
         }
     }
 
@@ -72,10 +77,25 @@ impl http_body::Body for Body {
     }
 }
 
+impl fmt::Debug for Body {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.kind {
+            Kind::Empty => f.debug_struct("Body").field("kind", &"Empty").finish(),
+            Kind::Wrap(_) => f.debug_struct("Body").field("kind", &"Wrap(..)").finish(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use http_body::Body as _;
+
+    #[test]
+    fn body_is_send() {
+        fn assert_send<T: Send>() {}
+        assert_send::<Body>();
+    }
 
     #[test]
     fn empty_body_is_end_stream() {

@@ -115,7 +115,11 @@ impl EnabledCompressionEncodings {
         if encodings.is_empty() {
             None
         } else {
-            Some(HeaderValue::from_str(&encodings.join(",")).unwrap())
+            // Safe: all encoding strings are ASCII constants (e.g., "gzip")
+            Some(
+                HeaderValue::from_str(&encodings.join(","))
+                    .expect("encoding names are valid ASCII"),
+            )
         }
     }
 }
@@ -126,10 +130,11 @@ pub const ACCEPT_ENCODING_HEADER: &str = "grpc-accept-encoding";
 /// Compress data using the given encoding.
 pub fn compress(
     encoding: CompressionEncoding,
-    src: &[u8],
-    dst: &mut bytes::BytesMut,
+    #[cfg(feature = "gzip")] src: &[u8],
+    #[cfg(not(feature = "gzip"))] _src: &[u8],
+    #[cfg(feature = "gzip")] dst: &mut bytes::BytesMut,
+    #[cfg(not(feature = "gzip"))] _dst: &mut bytes::BytesMut,
 ) -> Result<(), std::io::Error> {
-    let _ = (&encoding, src, &dst);
     match encoding {
         #[cfg(feature = "gzip")]
         CompressionEncoding::Gzip => {
@@ -148,10 +153,11 @@ pub fn compress(
 /// Decompress data using the given encoding.
 pub fn decompress(
     encoding: CompressionEncoding,
-    src: &[u8],
-    dst: &mut bytes::BytesMut,
+    #[cfg(feature = "gzip")] src: &[u8],
+    #[cfg(not(feature = "gzip"))] _src: &[u8],
+    #[cfg(feature = "gzip")] dst: &mut bytes::BytesMut,
+    #[cfg(not(feature = "gzip"))] _dst: &mut bytes::BytesMut,
 ) -> Result<(), std::io::Error> {
-    let _ = (&encoding, src, &dst);
     match encoding {
         #[cfg(feature = "gzip")]
         CompressionEncoding::Gzip => {

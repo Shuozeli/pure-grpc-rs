@@ -2,6 +2,8 @@
 //!
 //! Enables tools like `grpcurl` to discover services without `.proto` files.
 //!
+//! Requires the `prost-codec` feature (enabled by default).
+//!
 //! # Usage
 //!
 //! ```ignore
@@ -16,109 +18,132 @@
 //!     .add_service("grpc.reflection.v1.ServerReflection", reflection);
 //! ```
 
+#[cfg(not(feature = "prost-codec"))]
+compile_error!(
+    "grpc-reflection requires the `prost-codec` feature. \
+     Enable it with: grpc-reflection = { features = [\"prost-codec\"] }"
+);
+
 pub mod proto;
 
 use grpc_core::body::Body;
 use grpc_core::codec::prost_codec::ProstCodec;
+use grpc_core::{BoxFuture, BoxStream};
 use grpc_core::{Request, Response, Status, Streaming};
 use grpc_server::{Grpc, NamedService, StreamingService};
 use std::collections::HashMap;
 use std::convert::Infallible;
-use std::future::Future;
-use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-use tokio_stream::Stream;
 
 pub use proto::{
     server_reflection_response::MessageResponse, ErrorResponse, FileDescriptorResponse,
     ListServiceResponse, ServerReflectionRequest, ServerReflectionResponse, ServiceResponse,
 };
 
-type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
-type BoxStream<T> = Pin<Box<dyn Stream<Item = T> + Send + 'static>>;
+fn make_fqn(package: &str, name: &str) -> String {
+    if package.is_empty() {
+        name.to_string()
+    } else {
+        format!("{package}.{name}")
+    }
+}
+
+/// Recursively index message types and their nested messages/enums.
+fn index_message_types(
+    symbols: &mut HashMap<String, Arc<[u8]>>,
+    parent_fqn: &str,
+    messages: &[prost_types::DescriptorProto],
+    file_bytes: &Arc<[u8]>,
+) {
+    for msg in messages {
+        if let Some(msg_name) = &msg.name {
+            let fqn = make_fqn(parent_fqn, msg_name);
+            symbols.insert(fqn.clone(), Arc::clone(file_bytes));
+
+            // Recurse into nested messages
+            index_message_types(symbols, &fqn, &msg.nested_type, file_bytes);
+
+            // Index nested enums
+            for nested_enum in &msg.enum_type {
+                if let Some(enum_name) = &nested_enum.name {
+                    symbols.insert(make_fqn(&fqn, enum_name), Arc::clone(file_bytes));
+                }
+            }
+        }
+    }
+}
 
 /// State holding all indexed descriptors.
 struct ReflectionState {
     service_names: Vec<String>,
     /// Map from symbol name (e.g., "helloworld.Greeter") to serialized FileDescriptorProto.
-    symbols: HashMap<String, Vec<u8>>,
+    symbols: HashMap<String, Arc<[u8]>>,
     /// Map from filename to serialized FileDescriptorProto.
-    files: HashMap<String, Vec<u8>>,
+    files: HashMap<String, Arc<[u8]>>,
 }
 
 /// Builder for creating a [`ReflectionServer`].
 pub struct ReflectionServerBuilder {
     service_names: Vec<String>,
-    symbols: HashMap<String, Vec<u8>>,
-    files: HashMap<String, Vec<u8>>,
+    symbols: HashMap<String, Arc<[u8]>>,
+    files: HashMap<String, Arc<[u8]>>,
 }
 
 impl ReflectionServerBuilder {
     /// Register an encoded `FileDescriptorSet` (protobuf binary format).
     ///
-    /// This is typically the output of `protoc --descriptor_set_out` or
-    /// `protoc-rs-compiler`'s descriptor set serialization.
+    /// Register an encoded `FileDescriptorSet` (protobuf binary format).
+    ///
+    /// # Panics
+    ///
+    /// Panics if `encoded` is not a valid `FileDescriptorSet`. This is typically
+    /// called with compile-time-generated descriptors, so failure indicates a
+    /// build-system bug.
     pub fn register_encoded_file_descriptor_set(mut self, encoded: &[u8]) -> Self {
         use prost::Message;
-        if let Ok(fds) = prost_types::FileDescriptorSet::decode(encoded) {
-            for file in &fds.file {
-                let file_bytes = {
-                    let mut buf = Vec::new();
-                    file.encode(&mut buf).ok();
-                    buf
-                };
+        let fds = prost_types::FileDescriptorSet::decode(encoded)
+            .expect("invalid FileDescriptorSet: descriptor bytes are corrupt");
+        for file in &fds.file {
+            let file_bytes: Arc<[u8]> = {
+                let mut buf = Vec::new();
+                file.encode(&mut buf)
+                    .expect("re-encoding a decoded FileDescriptorProto should never fail");
+                buf.into()
+            };
 
-                // Index by filename
-                if let Some(name) = &file.name {
-                    self.files.insert(name.clone(), file_bytes.clone());
-                }
+            // Index by filename
+            if let Some(name) = &file.name {
+                self.files.insert(name.clone(), Arc::clone(&file_bytes));
+            }
 
-                let package = file.package.as_deref().unwrap_or("");
+            let package = file.package.as_deref().unwrap_or("");
 
-                // Index services
-                for svc in &file.service {
-                    if let Some(svc_name) = &svc.name {
-                        let fqn = if package.is_empty() {
-                            svc_name.clone()
-                        } else {
-                            format!("{package}.{svc_name}")
-                        };
-                        self.service_names.push(fqn.clone());
-                        self.symbols.insert(fqn.clone(), file_bytes.clone());
+            // Index services
+            for svc in &file.service {
+                if let Some(svc_name) = &svc.name {
+                    let fqn = make_fqn(package, svc_name);
+                    self.service_names.push(fqn.clone());
+                    self.symbols.insert(fqn.clone(), Arc::clone(&file_bytes));
 
-                        // Index methods
-                        for method in &svc.method {
-                            if let Some(method_name) = &method.name {
-                                let method_fqn = format!("{fqn}.{method_name}");
-                                self.symbols.insert(method_fqn, file_bytes.clone());
-                            }
+                    // Index methods
+                    for method in &svc.method {
+                        if let Some(method_name) = &method.name {
+                            let method_fqn = format!("{fqn}.{method_name}");
+                            self.symbols.insert(method_fqn, Arc::clone(&file_bytes));
                         }
                     }
                 }
+            }
 
-                // Index message types
-                for msg in &file.message_type {
-                    if let Some(msg_name) = &msg.name {
-                        let fqn = if package.is_empty() {
-                            msg_name.clone()
-                        } else {
-                            format!("{package}.{msg_name}")
-                        };
-                        self.symbols.insert(fqn, file_bytes.clone());
-                    }
-                }
+            // Index message types (recursively, including nested types)
+            index_message_types(&mut self.symbols, package, &file.message_type, &file_bytes);
 
-                // Index enum types
-                for enum_type in &file.enum_type {
-                    if let Some(enum_name) = &enum_type.name {
-                        let fqn = if package.is_empty() {
-                            enum_name.clone()
-                        } else {
-                            format!("{package}.{enum_name}")
-                        };
-                        self.symbols.insert(fqn, file_bytes.clone());
-                    }
+            // Index top-level enum types
+            for enum_type in &file.enum_type {
+                if let Some(enum_name) = &enum_type.name {
+                    self.symbols
+                        .insert(make_fqn(package, enum_name), Arc::clone(&file_bytes));
                 }
             }
         }
@@ -170,8 +195,6 @@ impl NamedService for ReflectionServer {
     const NAME: &'static str = "grpc.reflection.v1.ServerReflection";
 }
 
-// --- Streaming handler ---
-
 struct ReflectionInfoSvc {
     state: Arc<ReflectionState>,
 }
@@ -222,7 +245,7 @@ fn handle_reflection_request(
 
         Some(MessageRequest::FileContainingSymbol(symbol)) => match state.symbols.get(&symbol) {
             Some(file_bytes) => MessageResponse::FileDescriptorResponse(FileDescriptorResponse {
-                file_descriptor_proto: vec![file_bytes.clone()],
+                file_descriptor_proto: vec![file_bytes.to_vec()],
             }),
             None => MessageResponse::ErrorResponse(ErrorResponse {
                 error_code: Status::not_found("").code() as i32,
@@ -232,7 +255,7 @@ fn handle_reflection_request(
 
         Some(MessageRequest::FileByFilename(filename)) => match state.files.get(&filename) {
             Some(file_bytes) => MessageResponse::FileDescriptorResponse(FileDescriptorResponse {
-                file_descriptor_proto: vec![file_bytes.clone()],
+                file_descriptor_proto: vec![file_bytes.to_vec()],
             }),
             None => MessageResponse::ErrorResponse(ErrorResponse {
                 error_code: Status::not_found("").code() as i32,
@@ -241,7 +264,7 @@ fn handle_reflection_request(
         },
 
         Some(MessageRequest::AllExtensionNumbersOfType(_)) => {
-            // Return empty — extensions are rarely used
+            // Extensions are not supported — return error
             MessageResponse::ErrorResponse(ErrorResponse {
                 error_code: Status::unimplemented("").code() as i32,
                 error_message: "extensions not supported".to_string(),
@@ -260,8 +283,6 @@ fn handle_reflection_request(
         message_response: Some(response),
     }
 }
-
-// --- tower::Service impl ---
 
 impl tower_service::Service<http::Request<Body>> for ReflectionServer {
     type Response = http::Response<Body>;
@@ -331,6 +352,48 @@ mod tests {
             }
             other => panic!("expected ListServicesResponse, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn nested_message_types_are_indexed() {
+        use prost::Message;
+
+        // Build a FileDescriptorSet with a nested message:
+        // package "pkg", message Outer { message Inner { } enum Status { } }
+        let inner_msg = prost_types::DescriptorProto {
+            name: Some("Inner".into()),
+            ..Default::default()
+        };
+        let inner_enum = prost_types::EnumDescriptorProto {
+            name: Some("Status".into()),
+            ..Default::default()
+        };
+        let outer_msg = prost_types::DescriptorProto {
+            name: Some("Outer".into()),
+            nested_type: vec![inner_msg],
+            enum_type: vec![inner_enum],
+            ..Default::default()
+        };
+        let file = prost_types::FileDescriptorProto {
+            name: Some("test.proto".into()),
+            package: Some("pkg".into()),
+            message_type: vec![outer_msg],
+            ..Default::default()
+        };
+        let fds = prost_types::FileDescriptorSet { file: vec![file] };
+        let mut encoded = Vec::new();
+        fds.encode(&mut encoded).unwrap();
+
+        let server = ReflectionServer::builder()
+            .register_encoded_file_descriptor_set(&encoded)
+            .build();
+
+        // Top-level message
+        assert!(server.state.symbols.contains_key("pkg.Outer"));
+        // Nested message
+        assert!(server.state.symbols.contains_key("pkg.Outer.Inner"));
+        // Nested enum
+        assert!(server.state.symbols.contains_key("pkg.Outer.Status"));
     }
 
     #[test]

@@ -50,8 +50,25 @@ impl ServiceDef {
 impl MethodDef {
     /// gRPC path for this method (e.g., `"/helloworld.Greeter/SayHello"`).
     pub fn grpc_path(&self, service_fqn: &str) -> String {
+        debug_assert!(
+            !self.proto_name.contains('/'),
+            "proto_name must not contain '/', got: {:?}",
+            self.proto_name
+        );
         format!("/{service_fqn}/{}", self.proto_name)
     }
+}
+
+/// Convert comment strings into `#[doc = "..."]` token streams.
+pub fn comments_to_doc_tokens(comments: &[String]) -> proc_macro2::TokenStream {
+    let attrs: Vec<proc_macro2::TokenStream> = comments
+        .iter()
+        .map(|c| {
+            let line = format!(" {c}");
+            quote::quote! { #[doc = #line] }
+        })
+        .collect();
+    quote::quote! { #(#attrs)* }
 }
 
 #[cfg(test)]

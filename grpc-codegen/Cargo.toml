@@ -18,7 +18,7 @@ quote = "1"
 syn = "2"
 prettyplease = "0.2"
 
-protoc-rs-schema = { git = "https://github.com/shuozeli/protobuf-rs.git", optional = true }
-flatc-rs-schema = { git = "https://github.com/shuozeli/flatbuffers-rs.git", optional = true }
+protoc-rs-schema = { git = "https://github.com/shuozeli/protobuf-rs.git", branch = "main", optional = true }
+flatc-rs-schema = { git = "https://github.com/shuozeli/flatbuffers-rs.git", branch = "main", optional = true }
 
 [dev-dependencies]

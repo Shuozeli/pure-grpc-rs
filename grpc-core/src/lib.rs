@@ -30,3 +30,9 @@ pub use status::{Code, Status};
 
 /// A type alias for `Box<dyn std::error::Error + Send + Sync + 'static>`.
 pub type BoxError = Box<dyn std::error::Error + Send + Sync + 'static>;
+
+/// A type alias for a pinned, boxed, `Send` future.
+pub type BoxFuture<T> = std::pin::Pin<Box<dyn std::future::Future<Output = T> + Send + 'static>>;
+
+/// A type alias for a pinned, boxed, `Send` stream.
+pub type BoxStream<T> = std::pin::Pin<Box<dyn tokio_stream::Stream<Item = T> + Send + 'static>>;

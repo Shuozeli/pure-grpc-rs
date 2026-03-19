@@ -16,7 +16,12 @@ pub fn service_from_proto(
     package: &str,
     proto_path: &str,
 ) -> ServiceDef {
-    let name = proto.name.clone().unwrap_or_default();
+    let name = proto
+        .name
+        .as_deref()
+        .filter(|s| !s.is_empty())
+        .expect("service must have a name")
+        .to_string();
     let methods = proto
         .method
         .iter()
@@ -33,11 +38,30 @@ pub fn service_from_proto(
 }
 
 fn method_from_proto(proto: &MethodDescriptorProto, proto_path: &str) -> MethodDef {
-    let proto_name = proto.name.clone().unwrap_or_default();
+    let proto_name = proto
+        .name
+        .as_deref()
+        .filter(|s| !s.is_empty())
+        .expect("method must have a name")
+        .to_string();
     let name = proto_name.to_snake_case();
 
-    let input_type = resolve_type(proto.input_type.as_deref().unwrap_or(""), proto_path);
-    let output_type = resolve_type(proto.output_type.as_deref().unwrap_or(""), proto_path);
+    let input_type = resolve_type(
+        proto
+            .input_type
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .expect("method must have an input_type"),
+        proto_path,
+    );
+    let output_type = resolve_type(
+        proto
+            .output_type
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .expect("method must have an output_type"),
+        proto_path,
+    );
 
     MethodDef {
         name,

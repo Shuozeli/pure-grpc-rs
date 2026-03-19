@@ -18,148 +18,99 @@ const ENCODING_SET: &AsciiSet = &CONTROLS
     .add(b'{')
     .add(b'}');
 
-/// gRPC status codes.
-///
-/// These variants match the [gRPC status codes](https://github.com/grpc/grpc/blob/master/doc/statuscodes.md).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum Code {
-    Ok = 0,
-    Cancelled = 1,
-    Unknown = 2,
-    InvalidArgument = 3,
-    DeadlineExceeded = 4,
-    NotFound = 5,
-    AlreadyExists = 6,
-    PermissionDenied = 7,
-    ResourceExhausted = 8,
-    FailedPrecondition = 9,
-    Aborted = 10,
-    OutOfRange = 11,
-    Unimplemented = 12,
-    Internal = 13,
-    Unavailable = 14,
-    DataLoss = 15,
-    Unauthenticated = 16,
-}
-
-impl Code {
-    pub const fn from_i32(i: i32) -> Code {
-        match i {
-            0 => Code::Ok,
-            1 => Code::Cancelled,
-            2 => Code::Unknown,
-            3 => Code::InvalidArgument,
-            4 => Code::DeadlineExceeded,
-            5 => Code::NotFound,
-            6 => Code::AlreadyExists,
-            7 => Code::PermissionDenied,
-            8 => Code::ResourceExhausted,
-            9 => Code::FailedPrecondition,
-            10 => Code::Aborted,
-            11 => Code::OutOfRange,
-            12 => Code::Unimplemented,
-            13 => Code::Internal,
-            14 => Code::Unavailable,
-            15 => Code::DataLoss,
-            16 => Code::Unauthenticated,
-            _ => Code::Unknown,
+/// Generates `Code` enum, `from_i32`, `from_bytes`, `description`, `to_header_value`,
+/// `Display`, `From<i32>`, `From<Code> for i32`, and `Status` named constructors
+/// from a single definition table.
+macro_rules! define_codes {
+    (
+        $(
+            $variant:ident = $num:literal, $str_val:literal, $snake:ident, $desc:literal;
+        )*
+    ) => {
+        /// gRPC status codes.
+        ///
+        /// These variants match the [gRPC status codes](https://github.com/grpc/grpc/blob/master/doc/statuscodes.md).
+        #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+        pub enum Code {
+            $( $variant = $num, )*
         }
-    }
 
-    pub fn from_bytes(bytes: &[u8]) -> Code {
-        match bytes.len() {
-            1 => match bytes[0] {
-                b'0' => Code::Ok,
-                b'1' => Code::Cancelled,
-                b'2' => Code::Unknown,
-                b'3' => Code::InvalidArgument,
-                b'4' => Code::DeadlineExceeded,
-                b'5' => Code::NotFound,
-                b'6' => Code::AlreadyExists,
-                b'7' => Code::PermissionDenied,
-                b'8' => Code::ResourceExhausted,
-                b'9' => Code::FailedPrecondition,
-                _ => Code::Unknown,
-            },
-            2 => match (bytes[0], bytes[1]) {
-                (b'1', b'0') => Code::Aborted,
-                (b'1', b'1') => Code::OutOfRange,
-                (b'1', b'2') => Code::Unimplemented,
-                (b'1', b'3') => Code::Internal,
-                (b'1', b'4') => Code::Unavailable,
-                (b'1', b'5') => Code::DataLoss,
-                (b'1', b'6') => Code::Unauthenticated,
-                _ => Code::Unknown,
-            },
-            _ => Code::Unknown,
-        }
-    }
-
-    pub fn description(&self) -> &'static str {
-        match self {
-            Code::Ok => "The operation completed successfully",
-            Code::Cancelled => "The operation was cancelled",
-            Code::Unknown => "Unknown error",
-            Code::InvalidArgument => "Client specified an invalid argument",
-            Code::DeadlineExceeded => "Deadline expired before operation could complete",
-            Code::NotFound => "Some requested entity was not found",
-            Code::AlreadyExists => "Some entity that we attempted to create already exists",
-            Code::PermissionDenied => {
-                "The caller does not have permission to execute the specified operation"
+        impl Code {
+            pub const fn from_i32(i: i32) -> Code {
+                match i {
+                    $( $num => Code::$variant, )*
+                    _ => Code::Unknown,
+                }
             }
-            Code::ResourceExhausted => "Some resource has been exhausted",
-            Code::FailedPrecondition => {
-                "The system is not in a state required for the operation's execution"
+
+            pub fn from_bytes(bytes: &[u8]) -> Code {
+                match bytes {
+                    $( $str_val => Code::$variant, )*
+                    _ => Code::Unknown,
+                }
             }
-            Code::Aborted => "The operation was aborted",
-            Code::OutOfRange => "Operation was attempted past the valid range",
-            Code::Unimplemented => "Operation is not implemented or not supported",
-            Code::Internal => "Internal error",
-            Code::Unavailable => "The service is currently unavailable",
-            Code::DataLoss => "Unrecoverable data loss or corruption",
-            Code::Unauthenticated => "The request does not have valid authentication credentials",
+
+            pub fn description(&self) -> &'static str {
+                match self {
+                    $( Code::$variant => $desc, )*
+                }
+            }
+
+            fn to_header_value(self) -> HeaderValue {
+                match self {
+                    $( Code::$variant => HeaderValue::from_static(
+                        ::std::stringify!($num)
+                    ), )*
+                }
+            }
         }
-    }
 
-    fn to_header_value(self) -> HeaderValue {
-        match self {
-            Code::Ok => HeaderValue::from_static("0"),
-            Code::Cancelled => HeaderValue::from_static("1"),
-            Code::Unknown => HeaderValue::from_static("2"),
-            Code::InvalidArgument => HeaderValue::from_static("3"),
-            Code::DeadlineExceeded => HeaderValue::from_static("4"),
-            Code::NotFound => HeaderValue::from_static("5"),
-            Code::AlreadyExists => HeaderValue::from_static("6"),
-            Code::PermissionDenied => HeaderValue::from_static("7"),
-            Code::ResourceExhausted => HeaderValue::from_static("8"),
-            Code::FailedPrecondition => HeaderValue::from_static("9"),
-            Code::Aborted => HeaderValue::from_static("10"),
-            Code::OutOfRange => HeaderValue::from_static("11"),
-            Code::Unimplemented => HeaderValue::from_static("12"),
-            Code::Internal => HeaderValue::from_static("13"),
-            Code::Unavailable => HeaderValue::from_static("14"),
-            Code::DataLoss => HeaderValue::from_static("15"),
-            Code::Unauthenticated => HeaderValue::from_static("16"),
+        impl fmt::Display for Code {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                fmt::Display::fmt(self.description(), f)
+            }
         }
-    }
+
+        impl From<i32> for Code {
+            fn from(i: i32) -> Self {
+                Code::from_i32(i)
+            }
+        }
+
+        impl From<Code> for i32 {
+            fn from(code: Code) -> i32 {
+                code as i32
+            }
+        }
+
+        impl Status {
+            $(
+                pub fn $snake(message: impl Into<String>) -> Status {
+                    Status::new(Code::$variant, message)
+                }
+            )*
+        }
+    };
 }
 
-impl fmt::Display for Code {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(self.description(), f)
-    }
-}
-
-impl From<i32> for Code {
-    fn from(i: i32) -> Self {
-        Code::from_i32(i)
-    }
-}
-
-impl From<Code> for i32 {
-    fn from(code: Code) -> i32 {
-        code as i32
-    }
+define_codes! {
+    Ok = 0, b"0", ok, "The operation completed successfully";
+    Cancelled = 1, b"1", cancelled, "The operation was cancelled";
+    Unknown = 2, b"2", unknown, "Unknown error";
+    InvalidArgument = 3, b"3", invalid_argument, "Client specified an invalid argument";
+    DeadlineExceeded = 4, b"4", deadline_exceeded, "Deadline expired before operation could complete";
+    NotFound = 5, b"5", not_found, "Some requested entity was not found";
+    AlreadyExists = 6, b"6", already_exists, "Some entity that we attempted to create already exists";
+    PermissionDenied = 7, b"7", permission_denied, "The caller does not have permission to execute the specified operation";
+    ResourceExhausted = 8, b"8", resource_exhausted, "Some resource has been exhausted";
+    FailedPrecondition = 9, b"9", failed_precondition, "The system is not in a state required for the operation's execution";
+    Aborted = 10, b"10", aborted, "The operation was aborted";
+    OutOfRange = 11, b"11", out_of_range, "Operation was attempted past the valid range";
+    Unimplemented = 12, b"12", unimplemented, "Operation is not implemented or not supported";
+    Internal = 13, b"13", internal, "Internal error";
+    Unavailable = 14, b"14", unavailable, "The service is currently unavailable";
+    DataLoss = 15, b"15", data_loss, "Unrecoverable data loss or corruption";
+    Unauthenticated = 16, b"16", unauthenticated, "The request does not have valid authentication credentials";
 }
 
 // --- Status ---
@@ -192,74 +143,6 @@ impl Status {
             metadata: MetadataMap::new(),
             source: None,
         }))
-    }
-
-    pub fn ok(message: impl Into<String>) -> Status {
-        Status::new(Code::Ok, message)
-    }
-
-    pub fn cancelled(message: impl Into<String>) -> Status {
-        Status::new(Code::Cancelled, message)
-    }
-
-    pub fn unknown(message: impl Into<String>) -> Status {
-        Status::new(Code::Unknown, message)
-    }
-
-    pub fn invalid_argument(message: impl Into<String>) -> Status {
-        Status::new(Code::InvalidArgument, message)
-    }
-
-    pub fn deadline_exceeded(message: impl Into<String>) -> Status {
-        Status::new(Code::DeadlineExceeded, message)
-    }
-
-    pub fn not_found(message: impl Into<String>) -> Status {
-        Status::new(Code::NotFound, message)
-    }
-
-    pub fn already_exists(message: impl Into<String>) -> Status {
-        Status::new(Code::AlreadyExists, message)
-    }
-
-    pub fn permission_denied(message: impl Into<String>) -> Status {
-        Status::new(Code::PermissionDenied, message)
-    }
-
-    pub fn resource_exhausted(message: impl Into<String>) -> Status {
-        Status::new(Code::ResourceExhausted, message)
-    }
-
-    pub fn failed_precondition(message: impl Into<String>) -> Status {
-        Status::new(Code::FailedPrecondition, message)
-    }
-
-    pub fn aborted(message: impl Into<String>) -> Status {
-        Status::new(Code::Aborted, message)
-    }
-
-    pub fn out_of_range(message: impl Into<String>) -> Status {
-        Status::new(Code::OutOfRange, message)
-    }
-
-    pub fn unimplemented(message: impl Into<String>) -> Status {
-        Status::new(Code::Unimplemented, message)
-    }
-
-    pub fn internal(message: impl Into<String>) -> Status {
-        Status::new(Code::Internal, message)
-    }
-
-    pub fn unavailable(message: impl Into<String>) -> Status {
-        Status::new(Code::Unavailable, message)
-    }
-
-    pub fn data_loss(message: impl Into<String>) -> Status {
-        Status::new(Code::DataLoss, message)
-    }
-
-    pub fn unauthenticated(message: impl Into<String>) -> Status {
-        Status::new(Code::Unauthenticated, message)
     }
 
     pub fn with_details(code: Code, message: impl Into<String>, details: Bytes) -> Status {
@@ -351,26 +234,38 @@ impl Status {
         };
 
         let details = match header_map.get(Self::GRPC_STATUS_DETAILS) {
-            Some(header) => base64_engine()
-                .decode(header.as_bytes())
-                .unwrap_or_default()
-                .into(),
+            Some(header) => match base64_engine().decode(header.as_bytes()) {
+                Ok(bytes) => bytes.into(),
+                Err(_) => {
+                    // Corrupted status details — log context in the message
+                    return Some(Status::new(
+                        Code::Internal,
+                        "invalid base64 in grpc-status-details-bin header",
+                    ));
+                }
+            },
             None => Bytes::new(),
         };
 
         let other_headers = {
-            let mut hm = header_map.clone();
-            hm.remove(Self::GRPC_STATUS);
-            hm.remove(Self::GRPC_MESSAGE);
-            hm.remove(Self::GRPC_STATUS_DETAILS);
+            let mut hm = HeaderMap::with_capacity(header_map.len());
+            for (key, value) in header_map.iter() {
+                if key != Self::GRPC_STATUS
+                    && key != Self::GRPC_MESSAGE
+                    && key != Self::GRPC_STATUS_DETAILS
+                {
+                    hm.insert(key.clone(), value.clone());
+                }
+            }
             hm
         };
 
         let (code, message) = match error_message {
             Ok(message) => (code, message),
             Err(e) => {
+                // Keep the original gRPC status code; only the message is degraded.
                 let msg = format!("Error deserializing status message header: {e}");
-                (Code::Unknown, msg)
+                (code, msg)
             }
         };
 
@@ -384,15 +279,15 @@ impl Status {
 
     /// Serialize this status into HTTP headers.
     pub fn add_header(&self, header_map: &mut HeaderMap) -> Result<(), Self> {
-        header_map.extend(self.0.metadata.clone().into_sanitized_headers());
+        self.0.metadata.extend_sanitized_into(header_map);
         header_map.insert(Self::GRPC_STATUS, self.0.code.to_header_value());
 
         if !self.0.message.is_empty() {
-            let encoded = Bytes::copy_from_slice(
-                percent_encode(self.message().as_bytes(), ENCODING_SET)
-                    .collect::<String>()
-                    .as_bytes(),
-            );
+            let mut buf = bytes::BytesMut::new();
+            for chunk in percent_encode(self.message().as_bytes(), ENCODING_SET) {
+                buf.extend_from_slice(chunk.as_bytes());
+            }
+            let encoded = buf.freeze();
             header_map.insert(
                 Self::GRPC_MESSAGE,
                 HeaderValue::from_maybe_shared(encoded)
@@ -419,13 +314,21 @@ impl Status {
     }
 
     /// Build an `http::Response` from this `Status` (trailers-only response).
+    ///
+    /// If the status message contains bytes that cannot be encoded into a valid
+    /// header value, the message is dropped and only the status code is sent.
     pub fn into_http<B: Default>(self) -> http::Response<B> {
         let mut response = http::Response::new(B::default());
         response.headers_mut().insert(
             http::header::CONTENT_TYPE,
             crate::metadata::GRPC_CONTENT_TYPE,
         );
-        self.add_header(response.headers_mut()).unwrap();
+        if let Err(fallback) = self.add_header(response.headers_mut()) {
+            // The message couldn't be encoded; send just the code.
+            response
+                .headers_mut()
+                .insert(Self::GRPC_STATUS, fallback.code().to_header_value());
+        }
         response
     }
 }
@@ -534,7 +437,7 @@ pub(crate) fn infer_grpc_status(
         http::StatusCode::BAD_REQUEST => Code::Internal,
         http::StatusCode::UNAUTHORIZED => Code::Unauthenticated,
         http::StatusCode::FORBIDDEN => Code::PermissionDenied,
-        http::StatusCode::NOT_FOUND => Code::Unimplemented,
+        http::StatusCode::NOT_FOUND => Code::NotFound,
         http::StatusCode::TOO_MANY_REQUESTS
         | http::StatusCode::BAD_GATEWAY
         | http::StatusCode::SERVICE_UNAVAILABLE
@@ -694,6 +597,6 @@ mod tests {
         assert_eq!(err.unwrap().code(), Code::Unauthenticated);
 
         let err = infer_grpc_status(None, http::StatusCode::NOT_FOUND).unwrap_err();
-        assert_eq!(err.unwrap().code(), Code::Unimplemented);
+        assert_eq!(err.unwrap().code(), Code::NotFound);
     }
 }

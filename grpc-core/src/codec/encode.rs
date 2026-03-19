@@ -122,24 +122,35 @@ where
         buf.advance_mut(HEADER_SIZE);
     }
 
-    if let Some(encoding) = compression_encoding {
+    let encode_result = if let Some(encoding) = compression_encoding {
         // Encode into temp buffer, then compress into main buffer
         uncompression_buf.clear();
         encoder
             .encode(item, &mut EncodeBuf::new(uncompression_buf))
-            .map_err(|err| Status::internal(format!("Error encoding: {err}")))?;
-
-        super::compression::compress(encoding, uncompression_buf, buf)
-            .map_err(|err| Status::internal(format!("Error compressing: {err}")))?;
+            .map_err(|err| Status::internal(format!("Error encoding: {err}")))
+            .and_then(|()| {
+                super::compression::compress(encoding, uncompression_buf, buf)
+                    .map_err(|err| Status::internal(format!("Error compressing: {err}")))
+            })
     } else {
         // Encode directly (no compression)
         encoder
             .encode(item, &mut EncodeBuf::new(buf))
-            .map_err(|err| Status::internal(format!("Error encoding: {err}")))?;
+            .map_err(|err| Status::internal(format!("Error encoding: {err}")))
+    };
+
+    if let Err(status) = encode_result {
+        // Truncate back to discard the uninitialized header and any partial payload
+        buf.truncate(offset);
+        return Err(status);
     }
 
     // Backfill the header now that we know the length
-    finish_encoding(compression_encoding, max_message_size, &mut buf[offset..])
+    let result = finish_encoding(compression_encoding, max_message_size, &mut buf[offset..]);
+    if result.is_err() {
+        buf.truncate(offset);
+    }
+    result
 }
 
 fn finish_encoding(
@@ -314,6 +325,46 @@ mod tests {
     }
 
     #[test]
+    fn encode_item_error_truncates_buffer() {
+        // An encoder that always fails
+        #[derive(Debug)]
+        struct FailEncoder;
+
+        impl Encoder for FailEncoder {
+            type Item = Vec<u8>;
+            type Error = Status;
+
+            fn encode(
+                &mut self,
+                _item: Self::Item,
+                _buf: &mut EncodeBuf<'_>,
+            ) -> Result<(), Self::Error> {
+                Err(Status::internal("boom"))
+            }
+        }
+
+        let mut encoder = FailEncoder;
+        let mut buf = BytesMut::new();
+        buf.extend_from_slice(b"existing");
+        let original_len = buf.len();
+
+        let mut uncomp_buf = BytesMut::new();
+        let result = encode_item(
+            &mut encoder,
+            &mut buf,
+            &mut uncomp_buf,
+            None,
+            None,
+            vec![1, 2, 3],
+        );
+
+        assert!(result.is_err());
+        // Buffer must be truncated back — no partial header bytes left behind
+        assert_eq!(buf.len(), original_len);
+        assert_eq!(&buf[..], b"existing");
+    }
+
+    #[test]
     fn encode_item_respects_max_message_size() {
         let mut encoder = TestEncoder;
         let mut buf = BytesMut::new();
@@ -388,7 +439,6 @@ mod tests {
 
     #[tokio::test]
     async fn encode_body_client_no_trailers() {
-        use http_body::Body as _;
         use http_body_util::BodyExt;
         use std::pin::pin;
 

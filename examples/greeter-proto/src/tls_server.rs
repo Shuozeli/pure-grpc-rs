@@ -1,12 +1,8 @@
 use greeter_proto::greeter_server::{Greeter, GreeterServer};
 use greeter_proto::{HelloReply, HelloRequest};
-use grpc_core::{Request, Response, Status};
+use grpc_core::{BoxFuture, BoxStream, Request, Response, Status};
 use grpc_server::{NamedService, Router, Server};
-use std::future::Future;
 use std::net::SocketAddr;
-use std::pin::Pin;
-
-type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
 
 struct MyGreeter;
 
@@ -22,12 +18,11 @@ impl Greeter for MyGreeter {
         Box::pin(async move { Ok(Response::new(reply)) })
     }
 
-    type SayHelloServerStreamStream =
-        Pin<Box<dyn tokio_stream::Stream<Item = Result<HelloReply, Status>> + Send + 'static>>;
+    type SayHelloServerStreamResponseStream = BoxStream<Result<HelloReply, Status>>;
     fn say_hello_server_stream(
         &self,
         _request: Request<HelloRequest>,
-    ) -> BoxFuture<Result<Response<Self::SayHelloServerStreamStream>, Status>> {
+    ) -> BoxFuture<Result<Response<Self::SayHelloServerStreamResponseStream>, Status>> {
         Box::pin(async { Err(Status::unimplemented("not implemented in TLS example")) })
     }
 
@@ -38,12 +33,11 @@ impl Greeter for MyGreeter {
         Box::pin(async { Err(Status::unimplemented("not implemented in TLS example")) })
     }
 
-    type SayHelloBidiStreamStream =
-        Pin<Box<dyn tokio_stream::Stream<Item = Result<HelloReply, Status>> + Send + 'static>>;
+    type SayHelloBidiStreamResponseStream = BoxStream<Result<HelloReply, Status>>;
     fn say_hello_bidi_stream(
         &self,
         _request: Request<grpc_core::Streaming<HelloRequest>>,
-    ) -> BoxFuture<Result<Response<Self::SayHelloBidiStreamStream>, Status>> {
+    ) -> BoxFuture<Result<Response<Self::SayHelloBidiStreamResponseStream>, Status>> {
         Box::pin(async { Err(Status::unimplemented("not implemented in TLS example")) })
     }
 }

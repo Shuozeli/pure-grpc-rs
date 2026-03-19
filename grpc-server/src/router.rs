@@ -1,15 +1,12 @@
 use grpc_core::body::Body;
+use grpc_core::BoxFuture;
 use grpc_core::Status;
 use http::{Request, Response};
 use std::collections::HashMap;
 use std::convert::Infallible;
-use std::future::Future;
-use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 use tower_service::Service;
-
-type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
 
 /// Trait object for a gRPC service that can be stored in the router.
 ///
@@ -109,7 +106,7 @@ impl Service<Request<Body>> for Router {
             svc.call_box(req)
         } else {
             Box::pin(async {
-                let status = Status::unimplemented("");
+                let status = Status::unimplemented("service not found");
                 let (parts, ()) = status.into_http::<()>().into_parts();
                 Ok(Response::from_parts(parts, Body::empty()))
             })

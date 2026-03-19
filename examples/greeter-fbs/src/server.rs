@@ -1,12 +1,8 @@
 use greeter_fbs::greeter_server::{Greeter, GreeterServer};
 use greeter_fbs::{HelloReply, HelloRequest};
-use grpc_core::{Request, Response, Status};
+use grpc_core::{BoxFuture, Request, Response, Status};
 use grpc_server::{NamedService, Router, Server};
-use std::future::Future;
 use std::net::SocketAddr;
-use std::pin::Pin;
-
-type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
 
 struct MyGreeter;
 

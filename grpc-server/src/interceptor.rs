@@ -1,13 +1,10 @@
 use grpc_core::body::Body;
+use grpc_core::BoxFuture;
 use grpc_core::Status;
 use http::{Request, Response};
 use std::convert::Infallible;
-use std::future::Future;
-use std::pin::Pin;
 use std::task::{Context, Poll};
 use tower_service::Service;
-
-type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
 
 /// A gRPC interceptor function.
 ///
@@ -77,29 +74,23 @@ where
     }
 
     fn call(&mut self, req: Request<Body>) -> Self::Future {
-        // Extract metadata from the request for the interceptor
-        let (parts, body) = req.into_parts();
-        let metadata = grpc_core::MetadataMap::from_headers(parts.headers.clone());
-        let interceptor_req =
-            grpc_core::Request::from_parts(metadata, parts.extensions.clone(), ());
+        // Extract metadata from the request for the interceptor.
+        // We move (not clone) headers and extensions into the interceptor request.
+        let (mut parts, body) = req.into_parts();
+        let original_headers = std::mem::take(&mut parts.headers);
+        let original_extensions = std::mem::take(&mut parts.extensions);
+        let metadata = grpc_core::MetadataMap::from_headers(original_headers);
+        let interceptor_req = grpc_core::Request::from_parts(metadata, original_extensions, ());
 
         // Run interceptor
         match self.interceptor.intercept(interceptor_req) {
             Ok(intercepted) => {
-                // Merge any modified metadata/extensions back
+                // Put the (possibly modified) metadata/extensions back
                 let (new_metadata, new_extensions, _) = intercepted.into_parts();
-                let mut headers = new_metadata.into_headers();
-                // Preserve original non-metadata headers (content-type, te, etc.)
-                for (key, value) in &parts.headers {
-                    if !headers.contains_key(key) {
-                        headers.insert(key.clone(), value.clone());
-                    }
-                }
-                let mut new_parts = parts;
-                new_parts.headers = headers;
-                new_parts.extensions = new_extensions;
+                parts.headers = new_metadata.into_headers();
+                parts.extensions = new_extensions;
 
-                let req = Request::from_parts(new_parts, body);
+                let req = Request::from_parts(parts, body);
                 let mut inner = self.inner.clone();
                 Box::pin(async move { inner.call(req).await })
             }

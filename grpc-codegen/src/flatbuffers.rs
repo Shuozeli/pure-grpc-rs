@@ -28,18 +28,27 @@ pub fn service_from_fbs(
         .map(|call| method_from_fbs(call, schema, proto_path))
         .collect();
 
+    let name = service.name.clone();
     ServiceDef {
-        name: service.name.clone(),
+        proto_name: name.clone(),
+        name,
         package: namespace,
-        proto_name: service.name.clone(),
         methods,
         comments: extract_comments(&service.documentation),
     }
 }
 
 fn method_from_fbs(call: &ResolvedRpcCall, schema: &ResolvedSchema, proto_path: &str) -> MethodDef {
-    let request_name = &schema.objects[call.request_index].name;
-    let response_name = &schema.objects[call.response_index].name;
+    let request_name = &schema
+        .objects
+        .get(call.request_index)
+        .expect("request_index out of bounds in schema.objects")
+        .name;
+    let response_name = &schema
+        .objects
+        .get(call.response_index)
+        .expect("response_index out of bounds in schema.objects")
+        .name;
 
     let (client_streaming, server_streaming) = parse_streaming(&call.attributes);
 

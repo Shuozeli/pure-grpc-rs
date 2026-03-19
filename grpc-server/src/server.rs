@@ -6,17 +6,23 @@ use std::convert::Infallible;
 use std::future::Future;
 use std::net::SocketAddr;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::TcpListener;
+use tokio::sync::Semaphore;
 use tower_service::Service;
 use tracing::{debug, info, trace};
 
 /// A gRPC server that listens on a TCP socket and serves HTTP/2 requests.
 ///
 /// Supports optional TLS via rustls (feature = "tls").
+/// Default max concurrent connections if not configured.
+const DEFAULT_CONCURRENCY_LIMIT: usize = 1024;
+
 pub struct Server {
     tcp_nodelay: bool,
     timeout: Option<Duration>,
+    concurrency_limit: usize,
     #[cfg(feature = "tls")]
     tls_config: Option<TlsConfig>,
 }
@@ -32,6 +38,7 @@ impl Server {
         Self {
             tcp_nodelay: true,
             timeout: None,
+            concurrency_limit: DEFAULT_CONCURRENCY_LIMIT,
             #[cfg(feature = "tls")]
             tls_config: None,
         }
@@ -45,6 +52,16 @@ impl Server {
     /// Set a per-request timeout.
     pub fn timeout(mut self, timeout: Duration) -> Self {
         self.timeout = Some(timeout);
+        self
+    }
+
+    /// Set the maximum number of concurrent connections.
+    ///
+    /// Defaults to 1024. Once the limit is reached, the server stops accepting
+    /// new connections until an existing connection closes.
+    pub fn concurrency_limit(mut self, limit: usize) -> Self {
+        assert!(limit > 0, "concurrency_limit must be > 0");
+        self.concurrency_limit = limit;
         self
     }
 
@@ -147,6 +164,7 @@ impl Server {
         F: Future<Output = ()> + Send,
     {
         let timeout = self.timeout;
+        let sem = Arc::new(Semaphore::new(self.concurrency_limit));
         tokio::pin!(signal);
 
         loop {
@@ -158,6 +176,16 @@ impl Server {
                         stream.set_nodelay(true)?;
                     }
 
+                    let sem_clone = sem.clone();
+                    let permit = match sem_clone.try_acquire_owned() {
+                        Ok(permit) => permit,
+                        Err(_) => {
+                            debug!("concurrency limit reached, waiting for a slot");
+                            sem.clone().acquire_owned().await
+                                .expect("semaphore should not be closed")
+                        }
+                    };
+
                     debug!("accepted connection from {}", remote_addr);
 
                     let svc = svc.clone();
@@ -166,12 +194,13 @@ impl Server {
                     if let Some(ref tls_config) = self.tls_config {
                         let acceptor = tls_config.acceptor.clone();
                         tokio::spawn(async move {
+                            let _permit = permit;
                             match acceptor.accept(stream).await {
                                 Ok(tls_stream) => {
-                                    serve_connection(TokioIo::new(tls_stream), svc, timeout).await;
+                                    serve_connection(TokioIo::new(tls_stream), svc, timeout, remote_addr).await;
                                 }
                                 Err(err) => {
-                                    debug!("TLS handshake error from {}: {}", remote_addr, err);
+                                    tracing::warn!("TLS handshake error from {}: {}", remote_addr, err);
                                 }
                             }
                         });
@@ -179,7 +208,8 @@ impl Server {
                     }
 
                     tokio::spawn(async move {
-                        serve_connection(TokioIo::new(stream), svc, timeout).await;
+                        let _permit = permit;
+                        serve_connection(TokioIo::new(stream), svc, timeout, remote_addr).await;
                     });
                 }
                 _ = &mut signal => {
@@ -193,7 +223,7 @@ impl Server {
     }
 }
 
-async fn serve_connection<I, S>(io: I, svc: S, timeout: Option<Duration>)
+async fn serve_connection<I, S>(io: I, svc: S, timeout: Option<Duration>, remote_addr: SocketAddr)
 where
     I: hyper::rt::Read + hyper::rt::Write + Unpin + Send + 'static,
     S: Service<Request<Body>, Response = Response<Body>, Error = Infallible>
@@ -208,7 +238,7 @@ where
     };
     let builder = ConnectionBuilder::new(TokioExecutor::new());
     if let Err(err) = builder.serve_connection(io, hyper_svc).await {
-        debug!("connection error: {}", err);
+        debug!("connection error from {}: {}", remote_addr, err);
     }
 }
 
@@ -261,6 +291,7 @@ mod tests {
         let server = Server::builder();
         assert!(server.tcp_nodelay);
         assert!(server.timeout.is_none());
+        assert_eq!(server.concurrency_limit, DEFAULT_CONCURRENCY_LIMIT);
     }
 
     #[test]

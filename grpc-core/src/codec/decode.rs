@@ -157,7 +157,7 @@ impl<T> Streaming<T> {
     }
 
     fn decode_chunk(&mut self) -> Result<Option<T>, Status> {
-        match self.inner.decode_chunk(self.decoder.buffer_settings())? {
+        match self.inner.decode_chunk()? {
             Some(mut decode_buf) => match self.decoder.decode(&mut decode_buf)? {
                 Some(msg) => {
                     self.inner.state = State::ReadHeader;
@@ -171,10 +171,7 @@ impl<T> Streaming<T> {
 }
 
 impl StreamingInner {
-    fn decode_chunk(
-        &mut self,
-        _buffer_settings: super::BufferSettings,
-    ) -> Result<Option<DecodeBuf<'_>>, Status> {
+    fn decode_chunk(&mut self) -> Result<Option<DecodeBuf<'_>>, Status> {
         if let State::ReadHeader = self.state {
             if self.buf.remaining() < HEADER_SIZE {
                 return Ok(None);
@@ -243,7 +240,7 @@ impl StreamingInner {
                 if self.direction == Direction::Request && status.code() == Code::Cancelled {
                     return Poll::Ready(Ok(None));
                 }
-                let _ = std::mem::replace(&mut self.state, State::Error(Some(status.clone())));
+                self.state = State::Error(Some(status.clone()));
                 return Poll::Ready(Err(status));
             }
             None => {

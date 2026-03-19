@@ -26,8 +26,17 @@ jobs:
       - name: Build
         run: cargo build --workspace
 
+      - name: Build (all features)
+        run: cargo build --workspace --all-features
+
+      - name: Build (no default features - grpc-core)
+        run: cargo build -p grpc-core --no-default-features
+
       - name: Test
         run: cargo test --workspace
+
+      - name: Test (all features)
+        run: cargo test --workspace --all-features
 
   clippy:
     name: Clippy
@@ -46,6 +55,9 @@ jobs:
 
       - name: Clippy
         run: cargo clippy --workspace -- -D warnings
+
+      - name: Clippy (all features)
+        run: cargo clippy --workspace --all-features -- -D warnings
 
   fmt:
     name: Format

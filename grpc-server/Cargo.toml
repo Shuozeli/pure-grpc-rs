@@ -9,6 +9,7 @@ license = "MIT"
 [features]
 default = []
 tls = ["rustls", "tokio-rustls", "rustls-pemfile"]
+gzip = ["grpc-core/gzip"]
 
 [dependencies]
 grpc-core = { path = "../grpc-core" }
@@ -29,3 +30,4 @@ rustls-pemfile = { version = "2", optional = true }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+flate2 = "1"

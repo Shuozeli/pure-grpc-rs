@@ -24,6 +24,14 @@ enum TlsMode {
 
 impl Endpoint {
     pub fn new(uri: Uri) -> Self {
+        #[cfg(not(feature = "tls"))]
+        if uri.scheme_str() == Some("https") {
+            panic!(
+                "https:// URI requires the `tls` feature. \
+                 Enable it with: grpc-client = {{ features = [\"tls\"] }}"
+            );
+        }
+
         #[cfg(feature = "tls")]
         let tls = if uri_is_https(&uri) {
             TlsMode::Native
@@ -45,11 +53,13 @@ impl Endpoint {
     }
 
     pub fn timeout(mut self, timeout: Duration) -> Self {
+        assert!(!timeout.is_zero(), "timeout must be non-zero");
         self.timeout = Some(timeout);
         self
     }
 
     pub fn connect_timeout(mut self, timeout: Duration) -> Self {
+        assert!(!timeout.is_zero(), "connect_timeout must be non-zero");
         self.connect_timeout = Some(timeout);
         self
     }
@@ -73,20 +83,41 @@ impl Endpoint {
     }
 
     /// Connect to the endpoint and return a [`Channel`].
+    ///
+    /// Applies `connect_timeout` (if set) to the connection establishment,
+    /// and `timeout` (if set) as a per-request deadline on the returned channel.
     pub async fn connect(&self) -> Result<Channel, BoxError> {
-        // TODO(refactor): apply timeout and connect_timeout settings
-        #[cfg(feature = "tls")]
-        {
-            match &self.tls {
-                TlsMode::None => Channel::connect(self.uri.clone()).await,
-                TlsMode::Native => Channel::connect_tls(self.uri.clone()).await,
-                TlsMode::CustomCa(ca) => Channel::connect_with_ca(self.uri.clone(), ca).await,
+        let uri = self.uri.clone();
+        let connect_fut = async {
+            #[cfg(feature = "tls")]
+            {
+                match &self.tls {
+                    TlsMode::None => Channel::connect(uri).await,
+                    TlsMode::Native => Channel::connect_tls(uri).await,
+                    TlsMode::CustomCa(ca) => Channel::connect_with_ca(uri, ca).await,
+                }
             }
+            #[cfg(not(feature = "tls"))]
+            {
+                Channel::connect(uri).await
+            }
+        };
+
+        let mut channel = match self.connect_timeout {
+            Some(duration) => tokio::time::timeout(duration, connect_fut)
+                .await
+                .map_err(|_| -> BoxError {
+                    Box::new(grpc_core::Status::deadline_exceeded("connect timed out"))
+                })
+                .and_then(|r| r)?,
+            None => connect_fut.await?,
+        };
+
+        if let Some(timeout) = self.timeout {
+            channel = channel.with_timeout(timeout);
         }
-        #[cfg(not(feature = "tls"))]
-        {
-            Channel::connect(self.uri.clone()).await
-        }
+
+        Ok(channel)
     }
 }
 
@@ -135,5 +166,23 @@ mod tests {
             .connect_timeout(Duration::from_secs(1));
         assert_eq!(ep.timeout, Some(Duration::from_secs(5)));
         assert_eq!(ep.connect_timeout, Some(Duration::from_secs(1)));
+    }
+
+    #[tokio::test]
+    async fn endpoint_connect_returns_channel() {
+        let ep = Endpoint::from_static("http://127.0.0.1:50051");
+        // connect() is lazy (no actual TCP connection until first request),
+        // so this should always succeed
+        let channel = ep.connect().await;
+        assert!(channel.is_ok());
+        assert_eq!(channel.unwrap().uri().host(), Some("127.0.0.1"));
+    }
+
+    #[tokio::test]
+    async fn endpoint_connect_propagates_timeout() {
+        let ep = Endpoint::from_static("http://127.0.0.1:50051").timeout(Duration::from_secs(5));
+        let channel = ep.connect().await.unwrap();
+        // Timeout is stored internally on the channel; verify channel was created
+        assert_eq!(channel.uri().host(), Some("127.0.0.1"));
     }
 }

@@ -75,15 +75,11 @@ pub mod greeter_server {
     use super::{HelloReply, HelloRequest};
     use grpc_codec_flatbuffers::FlatBuffersCodec;
     use grpc_core::body::Body;
-    use grpc_core::{Request, Response, Status};
+    use grpc_core::{BoxFuture, Request, Response, Status};
     use grpc_server::{Grpc, NamedService, UnaryService};
     use std::convert::Infallible;
-    use std::future::Future;
-    use std::pin::Pin;
     use std::sync::Arc;
     use std::task::{Context, Poll};
-
-    type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
 
     pub trait Greeter: Send + Sync + 'static {
         fn say_hello(
