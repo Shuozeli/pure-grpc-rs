@@ -115,9 +115,7 @@ pub fn health_service() -> (HealthServer, HealthHandle) {
     let handle = HealthHandle {
         state: state.clone(),
     };
-    let server = HealthServer {
-        state: state.clone(),
-    };
+    let server = HealthServer { state };
 
     (server, handle)
 }
@@ -203,7 +201,6 @@ impl ServerStreamingService<HealthCheckRequest> for WatchSvc {
     }
 }
 
-// Need the map import for WatchStream
 use tokio_stream::StreamExt as _;
 
 impl tower_service::Service<http::Request<Body>> for HealthServer {

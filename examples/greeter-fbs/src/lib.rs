@@ -1,8 +1,16 @@
-/// FlatBuffers greeter — generated types from `schema/greeter.fbs` via grpc-build,
-/// with hand-written FlatBufferGrpcMessage impls for gRPC codec bridging.
+//! FlatBuffers greeter -- generated types from `schema/greeter.fbs` via grpc-build,
+//! with hand-written FlatBufferGrpcMessage impls for gRPC codec bridging.
 
 // Include the generated FlatBuffers readers/builders
-#[allow(unused_imports, dead_code, non_snake_case, clippy::all)]
+#[allow(
+    unused_imports,
+    dead_code,
+    non_snake_case,
+    clippy::extra_unused_lifetimes,
+    clippy::needless_lifetimes,
+    clippy::derivable_impls,
+    clippy::unnecessary_cast
+)]
 mod generated {
     include!(concat!(env!("OUT_DIR"), "/greeter_generated.rs"));
 }

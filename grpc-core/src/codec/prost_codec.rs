@@ -60,7 +60,7 @@ impl<T: Message> Encoder for ProstEncoder<T> {
 
     fn encode(&mut self, item: Self::Item, buf: &mut EncodeBuf<'_>) -> Result<(), Self::Error> {
         item.encode(buf)
-            .expect("Message only errors if not enough space");
+            .map_err(|e| Status::internal(format!("prost encode error: {e}")))?;
         Ok(())
     }
 

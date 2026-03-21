@@ -114,7 +114,9 @@ impl<T> Request<T> {
 
     /// Set the max duration the request is allowed to take.
     pub fn set_timeout(&mut self, deadline: Duration) {
-        let value: http::HeaderValue = duration_to_grpc_timeout(deadline).parse().unwrap();
+        let value: http::HeaderValue = duration_to_grpc_timeout(deadline)
+            .parse()
+            .expect("grpc-timeout value is always valid ASCII digits + unit char");
         self.metadata_mut().insert(GRPC_TIMEOUT_HEADER, value);
     }
 

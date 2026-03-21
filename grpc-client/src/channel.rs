@@ -176,14 +176,14 @@ impl Service<Request<Body>> for Channel {
 
 impl std::fmt::Debug for Channel {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let tls = match self.inner {
+            ChannelInner::Http(_) => "no",
+            #[cfg(feature = "tls")]
+            ChannelInner::Https(_) => "yes",
+        };
         f.debug_struct("Channel")
             .field("uri", &self.uri)
-            .field(
-                "tls",
-                &matches!(self.inner, ChannelInner::Http(_))
-                    .then_some("no")
-                    .unwrap_or("yes"),
-            )
+            .field("tls", &tls)
             .finish()
     }
 }
