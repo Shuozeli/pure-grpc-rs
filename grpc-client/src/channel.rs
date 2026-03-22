@@ -34,10 +34,7 @@ enum ChannelInner {
 }
 
 /// Apply HTTP/2 settings to a hyper client builder.
-fn apply_h2_config(
-    builder: &mut hyper_util::client::legacy::Builder,
-    config: &Http2Config,
-) {
+fn apply_h2_config(builder: &mut hyper_util::client::legacy::Builder, config: &Http2Config) {
     if let Some(sz) = config.initial_stream_window_size {
         builder.http2_initial_stream_window_size(sz);
     }

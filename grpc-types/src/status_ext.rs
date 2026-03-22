@@ -95,73 +95,103 @@ impl StatusExt for Status {
     }
 
     fn get_details_error_info(&self) -> Option<ErrorInfo> {
-        self.error_details().ok()?.into_iter().find_map(|d| match d {
-            ErrorDetail::ErrorInfo(v) => Some(v),
-            _ => None,
-        })
+        self.error_details()
+            .ok()?
+            .into_iter()
+            .find_map(|d| match d {
+                ErrorDetail::ErrorInfo(v) => Some(v),
+                _ => None,
+            })
     }
 
     fn get_details_retry_info(&self) -> Option<RetryInfo> {
-        self.error_details().ok()?.into_iter().find_map(|d| match d {
-            ErrorDetail::RetryInfo(v) => Some(v),
-            _ => None,
-        })
+        self.error_details()
+            .ok()?
+            .into_iter()
+            .find_map(|d| match d {
+                ErrorDetail::RetryInfo(v) => Some(v),
+                _ => None,
+            })
     }
 
     fn get_details_debug_info(&self) -> Option<DebugInfo> {
-        self.error_details().ok()?.into_iter().find_map(|d| match d {
-            ErrorDetail::DebugInfo(v) => Some(v),
-            _ => None,
-        })
+        self.error_details()
+            .ok()?
+            .into_iter()
+            .find_map(|d| match d {
+                ErrorDetail::DebugInfo(v) => Some(v),
+                _ => None,
+            })
     }
 
     fn get_details_quota_failure(&self) -> Option<QuotaFailure> {
-        self.error_details().ok()?.into_iter().find_map(|d| match d {
-            ErrorDetail::QuotaFailure(v) => Some(v),
-            _ => None,
-        })
+        self.error_details()
+            .ok()?
+            .into_iter()
+            .find_map(|d| match d {
+                ErrorDetail::QuotaFailure(v) => Some(v),
+                _ => None,
+            })
     }
 
     fn get_details_precondition_failure(&self) -> Option<PreconditionFailure> {
-        self.error_details().ok()?.into_iter().find_map(|d| match d {
-            ErrorDetail::PreconditionFailure(v) => Some(v),
-            _ => None,
-        })
+        self.error_details()
+            .ok()?
+            .into_iter()
+            .find_map(|d| match d {
+                ErrorDetail::PreconditionFailure(v) => Some(v),
+                _ => None,
+            })
     }
 
     fn get_details_bad_request(&self) -> Option<BadRequest> {
-        self.error_details().ok()?.into_iter().find_map(|d| match d {
-            ErrorDetail::BadRequest(v) => Some(v),
-            _ => None,
-        })
+        self.error_details()
+            .ok()?
+            .into_iter()
+            .find_map(|d| match d {
+                ErrorDetail::BadRequest(v) => Some(v),
+                _ => None,
+            })
     }
 
     fn get_details_request_info(&self) -> Option<RequestInfo> {
-        self.error_details().ok()?.into_iter().find_map(|d| match d {
-            ErrorDetail::RequestInfo(v) => Some(v),
-            _ => None,
-        })
+        self.error_details()
+            .ok()?
+            .into_iter()
+            .find_map(|d| match d {
+                ErrorDetail::RequestInfo(v) => Some(v),
+                _ => None,
+            })
     }
 
     fn get_details_resource_info(&self) -> Option<ResourceInfo> {
-        self.error_details().ok()?.into_iter().find_map(|d| match d {
-            ErrorDetail::ResourceInfo(v) => Some(v),
-            _ => None,
-        })
+        self.error_details()
+            .ok()?
+            .into_iter()
+            .find_map(|d| match d {
+                ErrorDetail::ResourceInfo(v) => Some(v),
+                _ => None,
+            })
     }
 
     fn get_details_help(&self) -> Option<Help> {
-        self.error_details().ok()?.into_iter().find_map(|d| match d {
-            ErrorDetail::Help(v) => Some(v),
-            _ => None,
-        })
+        self.error_details()
+            .ok()?
+            .into_iter()
+            .find_map(|d| match d {
+                ErrorDetail::Help(v) => Some(v),
+                _ => None,
+            })
     }
 
     fn get_details_localized_message(&self) -> Option<LocalizedMessage> {
-        self.error_details().ok()?.into_iter().find_map(|d| match d {
-            ErrorDetail::LocalizedMessage(v) => Some(v),
-            _ => None,
-        })
+        self.error_details()
+            .ok()?
+            .into_iter()
+            .find_map(|d| match d {
+                ErrorDetail::LocalizedMessage(v) => Some(v),
+                _ => None,
+            })
     }
 }
 

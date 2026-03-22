@@ -28,7 +28,10 @@ impl<S> GrpcWebService<S> {
 
 impl<S, ReqBody, ResBody> Service<Request<ReqBody>> for GrpcWebService<S>
 where
-    S: Service<Request<GrpcWebCall<ReqBody>>, Response = Response<ResBody>> + Clone + Send + 'static,
+    S: Service<Request<GrpcWebCall<ReqBody>>, Response = Response<ResBody>>
+        + Clone
+        + Send
+        + 'static,
     S::Future: Send + 'static,
     S::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
     ReqBody: http_body::Body<Data = Bytes> + Unpin + Send + 'static,

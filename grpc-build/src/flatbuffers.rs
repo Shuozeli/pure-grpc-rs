@@ -35,9 +35,7 @@ pub fn compile_fbs(
     let include_paths: Vec<PathBuf> = includes.iter().map(|p| p.as_ref().to_path_buf()).collect();
     let input_files: Vec<PathBuf> = fbs_files.iter().map(|p| p.as_ref().to_path_buf()).collect();
 
-    let options = flatc_rs_compiler::CompilerOptions {
-        include_paths,
-    };
+    let options = flatc_rs_compiler::CompilerOptions { include_paths };
 
     let result = flatc_rs_compiler::compile(&input_files, &options)
         .map_err(|e| io::Error::other(format!("flatbuffers compilation failed: {e}")))?;

@@ -107,9 +107,7 @@ where
                 match encoding {
                     Encoding::Base64 => {
                         match BASE64.decode(data) {
-                            Ok(decoded) => {
-                                Poll::Ready(Some(Ok(Frame::data(Bytes::from(decoded)))))
-                            }
+                            Ok(decoded) => Poll::Ready(Some(Ok(Frame::data(Bytes::from(decoded))))),
                             Err(_) => {
                                 // Partial base64 — buffer and wait for more
                                 buf.extend_from_slice(data);
@@ -118,12 +116,12 @@ where
                                 if aligned_len > 0 {
                                     let chunk = buf.split_to(aligned_len);
                                     match BASE64.decode(&chunk) {
-                                        Ok(decoded) => Poll::Ready(Some(Ok(Frame::data(
-                                            Bytes::from(decoded),
-                                        )))),
-                                        Err(_) => Poll::Ready(Some(Ok(Frame::data(
-                                            chunk.freeze(),
-                                        )))),
+                                        Ok(decoded) => {
+                                            Poll::Ready(Some(Ok(Frame::data(Bytes::from(decoded)))))
+                                        }
+                                        Err(_) => {
+                                            Poll::Ready(Some(Ok(Frame::data(chunk.freeze()))))
+                                        }
                                     }
                                 } else {
                                     cx.waker().wake_by_ref();

@@ -113,12 +113,7 @@ mod compression_bench {
         group.bench_function("64KB", |b| {
             b.iter(|| {
                 let mut dst = BytesMut::with_capacity(70000);
-                decompress(
-                    CompressionEncoding::Gzip,
-                    black_box(&compressed),
-                    &mut dst,
-                )
-                .unwrap();
+                decompress(CompressionEncoding::Gzip, black_box(&compressed), &mut dst).unwrap();
             });
         });
 
@@ -161,12 +156,7 @@ mod zstd_bench {
         group.bench_function("64KB", |b| {
             b.iter(|| {
                 let mut dst = BytesMut::with_capacity(70000);
-                decompress(
-                    CompressionEncoding::Zstd,
-                    black_box(&compressed),
-                    &mut dst,
-                )
-                .unwrap();
+                decompress(CompressionEncoding::Zstd, black_box(&compressed), &mut dst).unwrap();
             });
         });
 

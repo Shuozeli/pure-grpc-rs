@@ -100,16 +100,52 @@ macro_rules! impl_any_traits {
     };
 }
 
-impl_any_traits!(ErrorInfo, ErrorInfo, "type.googleapis.com/google.rpc.ErrorInfo");
-impl_any_traits!(RetryInfo, RetryInfo, "type.googleapis.com/google.rpc.RetryInfo");
-impl_any_traits!(DebugInfo, DebugInfo, "type.googleapis.com/google.rpc.DebugInfo");
-impl_any_traits!(QuotaFailure, QuotaFailure, "type.googleapis.com/google.rpc.QuotaFailure");
-impl_any_traits!(PreconditionFailure, PreconditionFailure, "type.googleapis.com/google.rpc.PreconditionFailure");
-impl_any_traits!(BadRequest, BadRequest, "type.googleapis.com/google.rpc.BadRequest");
-impl_any_traits!(RequestInfo, RequestInfo, "type.googleapis.com/google.rpc.RequestInfo");
-impl_any_traits!(ResourceInfo, ResourceInfo, "type.googleapis.com/google.rpc.ResourceInfo");
+impl_any_traits!(
+    ErrorInfo,
+    ErrorInfo,
+    "type.googleapis.com/google.rpc.ErrorInfo"
+);
+impl_any_traits!(
+    RetryInfo,
+    RetryInfo,
+    "type.googleapis.com/google.rpc.RetryInfo"
+);
+impl_any_traits!(
+    DebugInfo,
+    DebugInfo,
+    "type.googleapis.com/google.rpc.DebugInfo"
+);
+impl_any_traits!(
+    QuotaFailure,
+    QuotaFailure,
+    "type.googleapis.com/google.rpc.QuotaFailure"
+);
+impl_any_traits!(
+    PreconditionFailure,
+    PreconditionFailure,
+    "type.googleapis.com/google.rpc.PreconditionFailure"
+);
+impl_any_traits!(
+    BadRequest,
+    BadRequest,
+    "type.googleapis.com/google.rpc.BadRequest"
+);
+impl_any_traits!(
+    RequestInfo,
+    RequestInfo,
+    "type.googleapis.com/google.rpc.RequestInfo"
+);
+impl_any_traits!(
+    ResourceInfo,
+    ResourceInfo,
+    "type.googleapis.com/google.rpc.ResourceInfo"
+);
 impl_any_traits!(Help, Help, "type.googleapis.com/google.rpc.Help");
-impl_any_traits!(LocalizedMessage, LocalizedMessage, "type.googleapis.com/google.rpc.LocalizedMessage");
+impl_any_traits!(
+    LocalizedMessage,
+    LocalizedMessage,
+    "type.googleapis.com/google.rpc.LocalizedMessage"
+);
 
 #[cfg(test)]
 mod tests {
