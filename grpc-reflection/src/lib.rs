@@ -217,6 +217,7 @@ impl StreamingService<ServerReflectionRequest> for ReflectionInfoSvc {
                 while let Some(Ok(req)) = input.message().await.transpose() {
                     let response = handle_reflection_request(&state, req);
                     if tx.send(Ok(response)).await.is_err() {
+                        tracing::trace!("reflection stream: client disconnected");
                         break;
                     }
                 }

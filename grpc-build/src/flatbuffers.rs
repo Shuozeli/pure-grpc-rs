@@ -36,7 +36,7 @@ pub fn compile_fbs(
     let input_files: Vec<PathBuf> = fbs_files.iter().map(|p| p.as_ref().to_path_buf()).collect();
 
     let options = flatc_rs_compiler::CompilerOptions {
-        include_paths: include_paths.clone(),
+        include_paths,
     };
 
     let result = flatc_rs_compiler::compile(&input_files, &options)

@@ -11,8 +11,8 @@ default = ["prost-codec"]
 prost-codec = ["prost", "grpc-core/prost-codec"]
 
 [dependencies]
-grpc-core = { path = "../grpc-core", default-features = false }
-grpc-server = { path = "../grpc-server" }
+grpc-core = { path = "../grpc-core", version = "0.1.0", default-features = false }
+grpc-server = { path = "../grpc-server", version = "0.1.0" }
 prost = { version = "0.13", optional = true }
 bytes = "1"
 http = "1"
@@ -20,6 +20,7 @@ http-body = "1"
 tower-service = "0.3"
 tokio = { version = "1", features = ["sync"] }
 tokio-stream = { version = "0.1", features = ["sync"] }
+tracing = "0.1"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

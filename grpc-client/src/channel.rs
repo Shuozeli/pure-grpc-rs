@@ -1,3 +1,4 @@
+use crate::endpoint::Http2Config;
 use grpc_core::body::Body;
 use grpc_core::BoxFuture;
 use http::{Request, Response};
@@ -32,14 +33,48 @@ enum ChannelInner {
     ),
 }
 
+/// Apply HTTP/2 settings to a hyper client builder.
+fn apply_h2_config(
+    builder: &mut hyper_util::client::legacy::Builder,
+    config: &Http2Config,
+) {
+    if let Some(sz) = config.initial_stream_window_size {
+        builder.http2_initial_stream_window_size(sz);
+    }
+    if let Some(sz) = config.initial_connection_window_size {
+        builder.http2_initial_connection_window_size(sz);
+    }
+    if let Some(enabled) = config.adaptive_window {
+        builder.http2_adaptive_window(enabled);
+    }
+    if let Some(sz) = config.max_frame_size {
+        builder.http2_max_frame_size(sz);
+    }
+    if let Some(interval) = config.keep_alive_interval {
+        builder.http2_keep_alive_interval(interval);
+    }
+    if let Some(timeout) = config.keep_alive_timeout {
+        builder.http2_keep_alive_timeout(timeout);
+    }
+}
+
 impl Channel {
     /// Create a new channel for plaintext HTTP/2 connections.
     ///
     /// The actual TCP connection is established lazily on first request.
     pub async fn connect(uri: http::Uri) -> Result<Self, BoxError> {
-        let client = Client::builder(TokioExecutor::new())
-            .http2_only(true)
-            .build_http();
+        Self::connect_with_h2_config(uri, Http2Config::default()).await
+    }
+
+    /// Create a new channel with HTTP/2 configuration.
+    pub(crate) async fn connect_with_h2_config(
+        uri: http::Uri,
+        config: Http2Config,
+    ) -> Result<Self, BoxError> {
+        let mut builder = Client::builder(TokioExecutor::new());
+        builder.http2_only(true);
+        apply_h2_config(&mut builder, &config);
+        let client = builder.build_http();
         Ok(Channel {
             inner: ChannelInner::Http(client),
             uri,
@@ -60,8 +95,16 @@ impl Channel {
     /// Uses the system's native certificate store for CA verification.
     #[cfg(feature = "tls")]
     pub async fn connect_tls(uri: http::Uri) -> Result<Self, BoxError> {
+        Self::connect_tls_with_h2_config(uri, Http2Config::default()).await
+    }
+
+    #[cfg(feature = "tls")]
+    pub(crate) async fn connect_tls_with_h2_config(
+        uri: http::Uri,
+        config: Http2Config,
+    ) -> Result<Self, BoxError> {
         let tls_config = Self::default_tls_config()?;
-        Self::connect_with_tls_config(uri, tls_config).await
+        Self::connect_with_tls_config_and_h2(uri, tls_config, config).await
     }
 
     /// Create a new channel with a custom TLS config.
@@ -72,15 +115,25 @@ impl Channel {
         uri: http::Uri,
         tls_config: rustls::ClientConfig,
     ) -> Result<Self, BoxError> {
+        Self::connect_with_tls_config_and_h2(uri, tls_config, Http2Config::default()).await
+    }
+
+    #[cfg(feature = "tls")]
+    async fn connect_with_tls_config_and_h2(
+        uri: http::Uri,
+        tls_config: rustls::ClientConfig,
+        h2_config: Http2Config,
+    ) -> Result<Self, BoxError> {
         let https = hyper_rustls::HttpsConnectorBuilder::new()
             .with_tls_config(tls_config)
             .https_or_http()
             .enable_http2()
             .build();
 
-        let client = Client::builder(TokioExecutor::new())
-            .http2_only(true)
-            .build(https);
+        let mut builder = Client::builder(TokioExecutor::new());
+        builder.http2_only(true);
+        apply_h2_config(&mut builder, &h2_config);
+        let client = builder.build(https);
 
         Ok(Channel {
             inner: ChannelInner::Https(client),
@@ -94,6 +147,15 @@ impl Channel {
     /// Useful for self-signed certificates in development/testing.
     #[cfg(feature = "tls")]
     pub async fn connect_with_ca(uri: http::Uri, ca_pem: &[u8]) -> Result<Self, BoxError> {
+        Self::connect_with_ca_and_h2_config(uri, ca_pem, Http2Config::default()).await
+    }
+
+    #[cfg(feature = "tls")]
+    pub(crate) async fn connect_with_ca_and_h2_config(
+        uri: http::Uri,
+        ca_pem: &[u8],
+        config: Http2Config,
+    ) -> Result<Self, BoxError> {
         let mut root_store = rustls::RootCertStore::empty();
         let certs = rustls_pemfile::certs(&mut std::io::BufReader::new(ca_pem))
             .collect::<Result<Vec<_>, _>>()?;
@@ -105,7 +167,7 @@ impl Channel {
             .with_root_certificates(root_store)
             .with_no_client_auth();
 
-        Self::connect_with_tls_config(uri, tls_config).await
+        Self::connect_with_tls_config_and_h2(uri, tls_config, config).await
     }
 
     #[cfg(feature = "tls")]

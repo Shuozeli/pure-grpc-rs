@@ -15,10 +15,12 @@
 //! let response = grpc.unary(request, path, codec).await?;
 //! ```
 
+mod balance;
 mod channel;
 mod endpoint;
 mod grpc;
 
+pub use self::balance::BalancedChannel;
 pub use self::channel::Channel;
 pub use self::endpoint::Endpoint;
 pub use self::grpc::{Grpc, GrpcService};

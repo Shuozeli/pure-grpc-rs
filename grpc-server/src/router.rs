@@ -90,6 +90,37 @@ impl Default for Router {
     }
 }
 
+impl Router {
+    /// Apply a tower `Layer` to the router, returning a new `Service`.
+    ///
+    /// This enables composing standard tower middleware (rate limiting, tracing,
+    /// concurrency limits, etc.) with gRPC services.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use tower::ServiceBuilder;
+    /// use std::time::Duration;
+    ///
+    /// let router = Router::new()
+    ///     .add_service("my.Service", my_service);
+    ///
+    /// let layered = router.into_layered(
+    ///     ServiceBuilder::new()
+    ///         .concurrency_limit(100)
+    ///         .timeout(Duration::from_secs(30))
+    /// );
+    ///
+    /// Server::builder().serve(addr, layered).await?;
+    /// ```
+    pub fn into_layered<L>(self, layer: L) -> L::Service
+    where
+        L: tower::Layer<Self>,
+    {
+        layer.layer(self)
+    }
+}
+
 impl Service<Request<Body>> for Router {
     type Response = Response<Body>;
     type Error = Infallible;

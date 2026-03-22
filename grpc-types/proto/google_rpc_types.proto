@@ -1,0 +1,8 @@
+// Umbrella proto that imports all google.rpc types for code generation.
+// This ensures both status.proto and error_details.proto are compiled
+// into a single google.rpc Rust module.
+syntax = "proto3";
+package google.rpc;
+
+import "google/rpc/status.proto";
+import "google/rpc/error_details.proto";

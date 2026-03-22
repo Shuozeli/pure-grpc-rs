@@ -23,7 +23,7 @@ flatbuffers = [
 ]
 
 [dependencies]
-grpc-codegen = { path = "../grpc-codegen" }
+grpc-codegen = { path = "../grpc-codegen", version = "0.1.0" }
 prettyplease = "0.2"
 syn = "2"
 proc-macro2 = "1"

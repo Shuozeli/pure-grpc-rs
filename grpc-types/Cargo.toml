@@ -1,8 +1,8 @@
 [package]
-name = "grpc-reflection"
+name = "grpc-types"
 version = "0.1.0"
 edition = "2021"
-description = "Part of pure-grpc-rs: a pure Rust gRPC framework with pluggable codecs"
+description = "Part of pure-grpc-rs: google.rpc rich error detail types"
 repository = "https://github.com/Shuozeli/pure-grpc-rs"
 license = "MIT"
 
@@ -12,16 +12,14 @@ prost-codec = ["prost", "prost-types", "grpc-core/prost-codec"]
 
 [dependencies]
 grpc-core = { path = "../grpc-core", version = "0.1.0", default-features = false }
-grpc-server = { path = "../grpc-server", version = "0.1.0" }
 prost = { version = "0.13", optional = true }
 prost-types = { version = "0.13", optional = true }
 bytes = "1"
-http = "1"
-http-body = "1"
-tower-service = "0.3"
-tokio = { version = "1", features = ["sync"] }
-tokio-stream = "0.1"
-tracing = "0.1"
+
+[build-dependencies]
+grpc-build = { path = "../grpc-build", version = "0.1.0" }
 
 [dev-dependencies]
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+prost = "0.13"
+prost-types = "0.13"
+http = "1"

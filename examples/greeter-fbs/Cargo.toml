@@ -2,6 +2,7 @@
 name = "greeter-fbs"
 version = "0.1.0"
 edition = "2021"
+publish = false
 
 [[bin]]
 name = "greeter-fbs-server"
@@ -12,10 +13,10 @@ name = "greeter-fbs-client"
 path = "src/client.rs"
 
 [dependencies]
-grpc-core = { path = "../../grpc-core", default-features = false }
-grpc-server = { path = "../../grpc-server" }
-grpc-client = { path = "../../grpc-client" }
-grpc-codec-flatbuffers = { path = "../../grpc-codec-flatbuffers" }
+grpc-core = { path = "../../grpc-core", version = "0.1.0", default-features = false }
+grpc-server = { path = "../../grpc-server", version = "0.1.0" }
+grpc-client = { path = "../../grpc-client", version = "0.1.0" }
+grpc-codec-flatbuffers = { path = "../../grpc-codec-flatbuffers", version = "0.1.0" }
 flatbuffers = "25"
 bytes = "1"
 http = "1"
@@ -27,4 +28,4 @@ tracing = "0.1"
 tracing-subscriber = "0.3"
 
 [build-dependencies]
-grpc-build = { path = "../../grpc-build", default-features = false, features = ["flatbuffers"] }
+grpc-build = { path = "../../grpc-build", version = "0.1.0", default-features = false, features = ["flatbuffers"] }

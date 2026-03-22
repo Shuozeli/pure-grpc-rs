@@ -1,0 +1,21 @@
+[package]
+name = "grpc-web"
+version = "0.1.0"
+edition = "2021"
+description = "Part of pure-grpc-rs: gRPC-Web protocol translation layer"
+repository = "https://github.com/Shuozeli/pure-grpc-rs"
+license = "MIT"
+
+[dependencies]
+bytes = "1"
+base64 = "0.22"
+http = "1"
+http-body = "1"
+http-body-util = "0.1"
+pin-project-lite = "0.2"
+tower-layer = "0.3"
+tower-service = "0.3"
+tracing = "0.1"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

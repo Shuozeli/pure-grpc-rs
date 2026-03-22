@@ -7,6 +7,6 @@ repository = "https://github.com/Shuozeli/pure-grpc-rs"
 license = "MIT"
 
 [dependencies]
-grpc-core = { path = "../grpc-core", default-features = false }
+grpc-core = { path = "../grpc-core", version = "0.1.0", default-features = false }
 flatbuffers = "25"
 bytes = "1"

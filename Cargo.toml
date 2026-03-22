@@ -9,6 +9,8 @@ members = [
     "grpc-codec-flatbuffers",
     "grpc-health",
     "grpc-reflection",
+    "grpc-types",
+    "grpc-web",
     "examples/greeter-proto",
     "examples/greeter-fbs",
 ]

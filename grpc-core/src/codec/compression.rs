@@ -6,6 +6,8 @@ use http::HeaderMap;
 pub enum CompressionEncoding {
     #[cfg(feature = "gzip")]
     Gzip,
+    #[cfg(feature = "zstd")]
+    Zstd,
 }
 
 impl CompressionEncoding {
@@ -13,12 +15,16 @@ impl CompressionEncoding {
     pub const ENCODINGS: &'static [CompressionEncoding] = &[
         #[cfg(feature = "gzip")]
         CompressionEncoding::Gzip,
+        #[cfg(feature = "zstd")]
+        CompressionEncoding::Zstd,
     ];
 
     pub fn as_str(self) -> &'static str {
         match self {
             #[cfg(feature = "gzip")]
             CompressionEncoding::Gzip => "gzip",
+            #[cfg(feature = "zstd")]
+            CompressionEncoding::Zstd => "zstd",
         }
     }
 
@@ -26,6 +32,8 @@ impl CompressionEncoding {
         match s {
             #[cfg(feature = "gzip")]
             "gzip" => Some(CompressionEncoding::Gzip),
+            #[cfg(feature = "zstd")]
+            "zstd" => Some(CompressionEncoding::Zstd),
             _ => None,
         }
     }
@@ -87,6 +95,8 @@ impl CompressionEncoding {
 pub struct EnabledCompressionEncodings {
     #[cfg(feature = "gzip")]
     gzip: bool,
+    #[cfg(feature = "zstd")]
+    zstd: bool,
 }
 
 impl EnabledCompressionEncodings {
@@ -94,6 +104,8 @@ impl EnabledCompressionEncodings {
         match encoding {
             #[cfg(feature = "gzip")]
             CompressionEncoding::Gzip => self.gzip = true,
+            #[cfg(feature = "zstd")]
+            CompressionEncoding::Zstd => self.zstd = true,
         }
     }
 
@@ -101,6 +113,8 @@ impl EnabledCompressionEncodings {
         match encoding {
             #[cfg(feature = "gzip")]
             CompressionEncoding::Gzip => self.gzip,
+            #[cfg(feature = "zstd")]
+            CompressionEncoding::Zstd => self.zstd,
         }
     }
 
@@ -115,7 +129,7 @@ impl EnabledCompressionEncodings {
         if encodings.is_empty() {
             None
         } else {
-            // Safe: all encoding strings are ASCII constants (e.g., "gzip")
+            // Safe: all encoding strings are ASCII constants (e.g., "gzip", "zstd")
             Some(
                 HeaderValue::from_str(&encodings.join(","))
                     .expect("encoding names are valid ASCII"),
@@ -150,6 +164,12 @@ pub fn compress(
             dst.extend_from_slice(&compressed);
             Ok(())
         }
+        #[cfg(feature = "zstd")]
+        CompressionEncoding::Zstd => {
+            let compressed = zstd::encode_all(src, 0)?;
+            dst.extend_from_slice(&compressed);
+            Ok(())
+        }
     }
 }
 
@@ -172,6 +192,12 @@ pub fn decompress(
             let mut decoder = GzDecoder::new(src);
             let mut decompressed = Vec::new();
             decoder.read_to_end(&mut decompressed)?;
+            dst.extend_from_slice(&decompressed);
+            Ok(())
+        }
+        #[cfg(feature = "zstd")]
+        CompressionEncoding::Zstd => {
+            let decompressed = zstd::decode_all(src)?;
             dst.extend_from_slice(&decompressed);
             Ok(())
         }
@@ -226,6 +252,51 @@ mod tests {
             enabled.enable(CompressionEncoding::Gzip);
             let val = enabled.into_accept_encoding_header_value().unwrap();
             assert_eq!(val, "gzip");
+        }
+    }
+
+    #[cfg(feature = "zstd")]
+    mod zstd_tests {
+        use super::super::*;
+        use bytes::BytesMut;
+
+        #[test]
+        fn compress_decompress_roundtrip() {
+            let data = b"hello world, this is a test of zstd compression!";
+            let mut compressed = BytesMut::new();
+            compress(CompressionEncoding::Zstd, data, &mut compressed).unwrap();
+
+            assert!(!compressed.is_empty());
+            assert_ne!(&compressed[..], data);
+
+            let mut decompressed = BytesMut::new();
+            decompress(CompressionEncoding::Zstd, &compressed, &mut decompressed).unwrap();
+
+            assert_eq!(&decompressed[..], data);
+        }
+
+        #[test]
+        fn encoding_from_str() {
+            assert_eq!(
+                CompressionEncoding::parse("zstd"),
+                Some(CompressionEncoding::Zstd)
+            );
+        }
+
+        #[test]
+        fn enabled_encodings() {
+            let mut enabled = EnabledCompressionEncodings::default();
+            assert!(!enabled.is_enabled(CompressionEncoding::Zstd));
+            enabled.enable(CompressionEncoding::Zstd);
+            assert!(enabled.is_enabled(CompressionEncoding::Zstd));
+        }
+
+        #[test]
+        fn accept_encoding_header_value() {
+            let mut enabled = EnabledCompressionEncodings::default();
+            enabled.enable(CompressionEncoding::Zstd);
+            let val = enabled.into_accept_encoding_header_value().unwrap();
+            assert_eq!(val, "zstd");
         }
     }
 }

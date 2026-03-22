@@ -15,7 +15,7 @@ pub fn service_from_fbs(
     service: &ResolvedService,
     schema: &ResolvedSchema,
     proto_path: &str,
-) -> ServiceDef {
+) -> Result<ServiceDef, String> {
     let namespace = service
         .namespace
         .as_ref()
@@ -26,33 +26,49 @@ pub fn service_from_fbs(
         .calls
         .iter()
         .map(|call| method_from_fbs(call, schema, proto_path))
-        .collect();
+        .collect::<Result<Vec<_>, _>>()?;
 
     let name = service.name.clone();
-    ServiceDef {
+    Ok(ServiceDef {
         proto_name: name.clone(),
         name,
         package: namespace,
         methods,
         comments: extract_comments(&service.documentation),
-    }
+    })
 }
 
-fn method_from_fbs(call: &ResolvedRpcCall, schema: &ResolvedSchema, proto_path: &str) -> MethodDef {
+fn method_from_fbs(
+    call: &ResolvedRpcCall,
+    schema: &ResolvedSchema,
+    proto_path: &str,
+) -> Result<MethodDef, String> {
     let request_name = &schema
         .objects
         .get(call.request_index)
-        .expect("request_index out of bounds in schema.objects")
+        .ok_or_else(|| {
+            format!(
+                "request_index {} out of bounds for schema with {} objects",
+                call.request_index,
+                schema.objects.len()
+            )
+        })?
         .name;
     let response_name = &schema
         .objects
         .get(call.response_index)
-        .expect("response_index out of bounds in schema.objects")
+        .ok_or_else(|| {
+            format!(
+                "response_index {} out of bounds for schema with {} objects",
+                call.response_index,
+                schema.objects.len()
+            )
+        })?
         .name;
 
     let (client_streaming, server_streaming) = parse_streaming(&call.attributes);
 
-    MethodDef {
+    Ok(MethodDef {
         name: call.name.to_snake_case(),
         proto_name: call.name.clone(),
         input_type: format!("{proto_path}::{request_name}"),
@@ -61,7 +77,7 @@ fn method_from_fbs(call: &ResolvedRpcCall, schema: &ResolvedSchema, proto_path: 
         server_streaming,
         codec_path: DEFAULT_CODEC_PATH.to_string(),
         comments: extract_comments(&call.documentation),
-    }
+    })
 }
 
 /// Parse streaming mode from FlatBuffers attributes.
@@ -182,7 +198,7 @@ mod tests {
     #[test]
     fn service_from_fbs_basic() {
         let (schema, service) = make_schema_with_service();
-        let svc_def = service_from_fbs(&service, &schema, "super");
+        let svc_def = service_from_fbs(&service, &schema, "super").unwrap();
 
         assert_eq!(svc_def.name, "Greeter");
         assert_eq!(svc_def.package, "helloworld");
@@ -197,6 +213,14 @@ mod tests {
 
         let m1 = &svc_def.methods[1];
         assert!(m1.server_streaming);
+    }
+
+    #[test]
+    fn service_from_fbs_invalid_index() {
+        let (schema, mut service) = make_schema_with_service();
+        service.calls[0].request_index = 999;
+        let err = service_from_fbs(&service, &schema, "super").unwrap_err();
+        assert!(err.contains("out of bounds"));
     }
 
     #[test]

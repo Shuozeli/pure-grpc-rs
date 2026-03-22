@@ -12,7 +12,7 @@ tls = ["rustls", "tokio-rustls", "rustls-pemfile", "rustls-native-certs", "hyper
 gzip = ["grpc-core/gzip"]
 
 [dependencies]
-grpc-core = { path = "../grpc-core" }
+grpc-core = { path = "../grpc-core", version = "0.1.0" }
 bytes = "1"
 http = "1"
 http-body = "1"

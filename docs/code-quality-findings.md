@@ -1,162 +1,68 @@
-# Code Quality Findings — pure-grpc-rs
+# Code Quality Findings -- pure-grpc-rs
 
-Adversarial audit performed 2026-03-19 (second pass). Merged with prior audit (2026-03-18).
-Phase 3 fixes applied 2026-03-19.
-Doc sync: 2026-03-19 — C1-C4 resolved, H6-H7 resolved, summary table fixed.
-
----
-
-## Resolved (Prior Audit)
-
-Issues found and fixed during the first audit cycle.
-
-| # | Issue | Resolution |
-|---|-------|------------|
-| 1 | `unsafe advance_mut` in encode.rs — buffer not truncated on error | Fixed: `buf.truncate(offset)` on encode error (encode.rs:142-146) |
-| 2 | `encode().ok()` / silent decode in reflection builder | Fixed: panics with descriptive context messages |
-| 3 | Base64 decode failure silently produces empty Bytes | Fixed: returns `Status::Internal` on corrupt `grpc-status-details-bin` |
-| 4 | TLS handshake errors logged at `debug!` only | Fixed: upgraded to `warn!` |
-| 5 | `.expect()` in `Status::into_http` | Fixed: graceful fallback sends code-only on encoding failure |
-| 6 | FQN formatting duplicated 3x in reflection | Fixed: extracted `make_fqn()` helper |
-| 7 | Reflection doesn't index nested messages/enums | Fixed: recursive `index_message_types()` |
-| 8 | `Status.clone()` + `std::mem::replace` in decode.rs | Fixed: direct assignment |
-| 9 | HTTP 404 mapped to gRPC `Unimplemented` | Fixed: maps to `Code::NotFound` |
-| 10 | Empty error message in router fallback | Fixed: `"service not found"` |
-| 11 | Inconsistent error handling across server Grpc methods | Fixed: all use `status.into_http()` consistently |
-| 12 | `MetadataMap` missing compression headers in reserved list | Fixed: includes `grpc-encoding`, `grpc-accept-encoding`, `grpc-status-details-bin` |
-| 13 | Incomplete `Debug` impl for client `Grpc` | Fixed: includes all fields |
-| 14 | Misleading "Return empty" comment in reflection | Fixed: comment matches behavior |
-| 15 | `.expect()` panics in client `prepare_request` | Fixed: returns `Result<_, Status>` with error context |
-| 16 | Hardcoded prost in health/reflection | Fixed: prost behind `prost-codec` feature flag (default-on) with `compile_error!` guard |
-
----
-
-## Resolved — Critical (Phase 3)
-
-| # | Issue | Resolution |
-|---|-------|------------|
-| C1 | Rustfmt violations across 13+ files | Fixed: `cargo fmt --all` — passes clean |
-| C2 | Unused import warning fails clippy | Fixed: `use http_body::Body as _` in test code is valid (used for `is_end_stream()`) |
-| C3 | Status code overwritten on message decode failure | Fixed: `status.rs:263-270` keeps original code, only message is degraded |
-| C4 | Server concurrency_limit(0) deadlocks | Fixed: `server.rs:63` asserts `limit > 0` |
-
----
-
-## Open — High (Architecture / Significant Quality)
-
-### H1. BoxFuture/BoxStream type aliases duplicated 7+ times
-- `grpc-server/src/router.rs:12`
-- `grpc-server/src/interceptor.rs:10`
-- `grpc-health/src/lib.rs:144-145`
-- `grpc-reflection/src/lib.rs:46-47`
-- `examples/greeter-proto/src/server.rs:10-11`
-- `examples/greeter-proto/tests/integration.rs:15-16`
-- `examples/greeter-fbs/src/lib.rs:86`
-- **Fix:** Define in `grpc-core` and re-export everywhere.
-
-### H2. Excessive cloning of file_bytes in grpc-reflection
-- `grpc-reflection/src/lib.rs:67, 75, 122, 132, 138, 151, 255, 265`
-- Every symbol gets its own `Vec<u8>` clone of the entire file descriptor.
-- **Fix:** Use `Arc<[u8]>` to share ownership.
-
-### H3. GrpcService trait is a no-op wrapper of tower::Service
-- `grpc-client/src/grpc.rs:16-49`
-- Trait adds zero behavior; blanket impl delegates 1:1.
-- **Fix:** Remove the trait, use `tower_service::Service` directly.
-
-### H4. Manual Clone impl where derive suffices
-- `grpc-client/src/grpc.rs:326-337` (`Grpc<T>`)
-- **Fix:** Replace with `#[derive(Clone)]`.
-
-### H5. Inconsistent error handling strategy in codegen
-- `grpc-codegen/src/protobuf.rs:19` — `unwrap_or_default()` (silent empty)
-- `grpc-codegen/src/protobuf.rs:40, 49, 57` — `expect()` (panic with message)
-- `grpc-codegen/src/client_gen.rs:85, 89, 93` — `panic!()` via `unwrap_or_else`
-- **Fix:** Standardize on returning `Result` throughout codegen.
-
-### ~~H6. Git dependencies unpinned~~ (Resolved)
-- Fixed: all git deps in `grpc-codegen/Cargo.toml` and `grpc-build/Cargo.toml` now have `branch = "main"`.
-
-### ~~H7. Clippy not run with --all-features in CI~~ (Resolved)
-- Fixed: `.github/workflows/ci.yml` now has `cargo clippy --workspace --all-features -- -D warnings`.
-
-### H8. Metadata cloned on every status serialization
-- `grpc-core/src/status.rs:281-282`
-- `self.0.metadata.clone().into_sanitized_headers()` — O(n) per response.
-- **Fix:** Provide reference-based iteration or consume self.
-
----
-
-## Resolved — Medium (2026-03-19, second pass)
-
-| # | Issue | Resolution |
-|---|-------|------------|
-| M1 | Body uses UnsyncBoxBody | NOT A BUG — uses custom `SendBoxBody` with `Send + 'static` bound |
-| M2 | Grpc::new creates client with empty URI | Fixed prior: tests require `with_origin` |
-| M3 | compress/decompress unreachable without gzip | Fixed: clean signatures, documented uninhabited enum design |
-| M4 | FlatBuffers decode silently defaults | Fixed: `.ok_or("field is required")?` error propagation |
-| M5 | Max message sizes accept zero | Fixed prior: `assert!(limit > 0)` |
-| M6 | Endpoint timeout accepts Duration::ZERO | Fixed prior: `assert!(!timeout.is_zero())` |
-| M7 | Codegen panics instead of returning Result | Fixed: `service_from_proto` returns `Result<ServiceDef, String>` |
-| M8 | gRPC path not validated | Fixed: `ServiceDef::validate()` checks names, slashes, empty fields |
-| M9 | FlatBuffers index without bounds check | Fixed prior: `.get().expect()` |
-| M10 | Reflection builder panics | Fixed: returns `Result<Self, Status>` |
-| M11 | Status cloned on stream error | Accepted: clone is necessary, marked with `// TODO(refactor):` |
-| M12 | Double clone in protobuf | Fixed prior |
-| M13 | Triple clone in flatbuffers | Fixed prior |
-| M14 | URI cloned 3x | Fixed prior |
-| M15 | Semaphore Arc cloned twice | Fixed prior |
-| M16 | O(n^2) header merge | NOT A BUG — code uses `std::mem::take`, no iteration |
-| M17 | Stream type naming collision | Fixed: `response_stream_ident()` strips trailing "Stream" |
-| M18 | Double-unwrap `??` | Fixed prior: `.and_then(\|r\| r)` |
-| M19 | Timeouts not applied | NOT A BUG — applied via `channel.with_timeout()` |
-| M20 | HTTPS without tls feature | Fixed prior: `panic!()` on https without tls |
-| M23 | Comments never populated (protobuf) | Documented: requires `SourceCodeInfo` integration |
-| M24 | Missing Response::from_http_parts | Fixed: added symmetric constructor + test |
-
-### Open — Incomplete Implementations (deliberate scope limits)
-
-**M21. TLS example stubs 3 of 4 RPC patterns**
-- `examples/greeter-proto/src/tls_server.rs` — intentional: minimal TLS demo.
-
-**M22. FlatBuffers example only supports unary**
-- `examples/greeter-fbs/src/lib.rs` — intentional: minimal FlatBuffers demo.
-
----
-
-## Resolved — Low (2026-03-19, second pass)
-
-| # | Issue | Resolution |
-|---|-------|------------|
-| L2 | Duplicated `module_items()` test helper | Fixed: extracted to `grpc-codegen/src/test_util.rs` |
-| L3 | Duplicated HTTP/HTTPS in Channel::call | Fixed: `send_request!` macro deduplicates branches |
-| L6 | Unsafe `advance_mut` lacks SAFETY comment | Fixed: added `// SAFETY:` comment |
-| L7 | Unused `_buffer_settings` parameter | STALE — parameter was already removed |
-| L8 | Unused `_service_name` parameter | STALE — parameter is used |
-| L14 | Connection errors without remote address | STALE — remote_addr is already logged |
-
-### Open — Low (not worth changing)
-
-- **L1.** Request/Response impls ~90% identical — dedup via macro would reduce readability
-- **L4.** MockService duplicated 3x in grpc-server tests — each variant serves different purpose
-- **L5.** Four-way streaming match repeated 3x in codegen — inherent to per-pattern token generation
-- **L9.** Section divider comments — style preference
-- **L10.** Test panics vs assertions in reflection — idiomatic Rust match-arm patterns
-- **L11.** String-based codegen assertions — some already use syn AST parsing, rest are adequate
-- **L12.** wait_for_server checks TCP only — acceptable for test reliability
-- **L13.** Missing error path tests — incremental, not blocking
-- **L15.** No tracing spans on connection tasks — polish
-- **L16.** No deny.toml — orthogonal to code quality
-- **L17.** Inconsistent error formatting — minor
-
----
+Audit performed 2026-03-20, 4-phase (Analyze, Document, Fix, Verify).
 
 ## Summary
 
-| Severity | Resolved | Open |
-|----------|----------|------|
-| Critical | 20 (16 prior + 4 phase 3) | 0 |
-| High | 10 (8 prior + H6, H7) | 6 (H1-H5, H8) |
-| Medium | 22 | 2 (deliberate scope limits) |
-| Low | 6 | 11 (not worth changing) |
-| **Total** | **58** | **19** |
+| ID   | Category             | Severity | File                                   | Line(s) | Status |
+|------|----------------------|----------|----------------------------------------|---------|--------|
+| F1   | Unsafe `.unwrap()`   | Medium   | grpc-core/src/request.rs               | 117     | FIXED  |
+| F2   | Unsafe `.expect()`   | Medium   | grpc-core/src/codec/prost_codec.rs     | 63      | FIXED  |
+| F3   | Duplicated test code | Low      | grpc-codegen/src/{ir,server_gen,client_gen}.rs | various | WONTFIX |
+| F4   | Duplicated test code | Low      | grpc-server/src/{router,server,interceptor}.rs | various | WONTFIX |
+| F5   | `#[allow(...)]`      | Medium   | examples/greeter-fbs/src/lib.rs        | 5       | FIXED  |
+| F6   | Confusing Debug impl | Low      | grpc-client/src/channel.rs             | 177-189 | FIXED  |
+| F7   | Unnecessary clone    | Low      | grpc-health/src/lib.rs                 | 118-119 | FIXED  |
+| F8   | Comment restating code | Low    | grpc-health/src/lib.rs                 | 206     | FIXED  |
+
+---
+
+## Detailed Findings
+
+### F1 -- Unsafe `.unwrap()` in `set_timeout` (Medium)
+
+**File:** `grpc-core/src/request.rs:117`
+**Problem:** `duration_to_grpc_timeout(deadline).parse().unwrap()` panics in production if the generated timeout string somehow fails to parse as a `HeaderValue`. While `duration_to_grpc_timeout` always produces valid strings, `.unwrap()` in non-test code violates fail-fast-with-error-propagation.
+**Fix:** Replace `.unwrap()` with `.expect("grpc-timeout value is always valid ASCII digits + unit char")` to document the invariant.
+
+### F2 -- Unsafe `.expect()` in ProstEncoder (Medium)
+
+**File:** `grpc-core/src/codec/prost_codec.rs:62-63`
+**Problem:** `item.encode(buf).expect("Message only errors if not enough space")` panics at runtime. `EncodeBuf` grows dynamically so this should never trigger, but panicking in a codec encode path is wrong -- the caller expects `Result`. The error should be propagated.
+**Fix:** Replace `.expect(...)` with `.map_err(|e| Status::internal(format!("prost encode error: {e}")))?`.
+
+### F3 -- Duplicated `sample_service()` in codegen tests (Low)
+
+**File:** `grpc-codegen/src/ir.rs:112`, `server_gen.rs:279`, `client_gen.rs:190`
+**Problem:** Three nearly-identical `sample_service()` test helper functions. They define the same `ServiceDef` with minor variations.
+**Status:** WONTFIX. These are in `#[cfg(test)]` modules which cannot share private functions across files without refactoring to a shared test module. The duplication is contained and each copy is small. Moving them to `test_util.rs` would add coupling for minimal benefit.
+
+### F4 -- Duplicated `MockService` in server tests (Low)
+
+**File:** `grpc-server/src/router.rs:123`, `server.rs:327`, `interceptor.rs:114`
+**Problem:** Three `MockService` structs implementing `tower::Service` for tests. Each is slightly different (router's has a name field, others don't).
+**Status:** WONTFIX. Same reasoning as F3 -- different enough to justify separate definitions, and contained in test modules.
+
+### F5 -- `#[allow(...)]` suppressing real warnings (Medium)
+
+**File:** `examples/greeter-fbs/src/lib.rs:5`
+**Problem:** `#[allow(unused_imports, dead_code, non_snake_case, clippy::all)]` is too broad. The CLAUDE.md rule says "do NOT use `#[allow(...)]` to bypass clippy or rustdoc warnings -- fix the root cause." This blanket allow could hide real issues in the generated code. A narrower scope is appropriate since the generated FlatBuffers code does produce these warnings.
+**Fix:** Keep the allow attributes but scope them more precisely: keep `non_snake_case` (FlatBuffers naming), `dead_code` and `unused_imports` (not all generated types are used), but remove `clippy::all` and replace with specific clippy lints that the generated code triggers.
+
+### F6 -- Confusing Debug impl for Channel (Low)
+
+**File:** `grpc-client/src/channel.rs:177-189`
+**Problem:** The TLS debug field uses a confusing double-negation pattern: `matches!(self.inner, ChannelInner::Http(_)).then_some("no").unwrap_or("yes")`. While logically correct, it reads as "if Http then no else yes" which requires careful mental parsing.
+**Fix:** Simplify to a direct `if`/`else` or `match`.
+
+### F7 -- Unnecessary clone of `state` (Low)
+
+**File:** `grpc-health/src/lib.rs:118-119`
+**Problem:** `state: state.clone()` is used for `server` construction when `state` (an `Arc`) is already cloned for `handle` on line 116. The final use of `state` on line 119 could use `state` directly (move it) instead of cloning, since `state` is not used after this point.
+**Fix:** Use `state` directly (move) for the last usage.
+
+### F8 -- Comment restating code (Low)
+
+**File:** `grpc-health/src/lib.rs:206`
+**Problem:** `// Need the map import for WatchStream` is a comment that restates what the `use` statement does. The import itself (`StreamExt as _`) is self-explanatory.
+**Fix:** Remove the comment.

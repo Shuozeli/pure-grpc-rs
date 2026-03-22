@@ -10,8 +10,20 @@ pub struct Endpoint {
     uri: Uri,
     timeout: Option<Duration>,
     connect_timeout: Option<Duration>,
+    http2: Http2Config,
     #[cfg(feature = "tls")]
     tls: TlsMode,
+}
+
+/// HTTP/2 connection-level settings for the client.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct Http2Config {
+    pub initial_stream_window_size: Option<u32>,
+    pub initial_connection_window_size: Option<u32>,
+    pub adaptive_window: Option<bool>,
+    pub max_frame_size: Option<u32>,
+    pub keep_alive_interval: Option<Duration>,
+    pub keep_alive_timeout: Option<Duration>,
 }
 
 #[cfg(feature = "tls")]
@@ -43,6 +55,7 @@ impl Endpoint {
             uri,
             timeout: None,
             connect_timeout: None,
+            http2: Http2Config::default(),
             #[cfg(feature = "tls")]
             tls,
         }
@@ -61,6 +74,42 @@ impl Endpoint {
     pub fn connect_timeout(mut self, timeout: Duration) -> Self {
         assert!(!timeout.is_zero(), "connect_timeout must be non-zero");
         self.connect_timeout = Some(timeout);
+        self
+    }
+
+    /// Set the initial HTTP/2 stream-level flow control window size (bytes).
+    pub fn initial_stream_window_size(mut self, size: u32) -> Self {
+        self.http2.initial_stream_window_size = Some(size);
+        self
+    }
+
+    /// Set the initial HTTP/2 connection-level flow control window size (bytes).
+    pub fn initial_connection_window_size(mut self, size: u32) -> Self {
+        self.http2.initial_connection_window_size = Some(size);
+        self
+    }
+
+    /// Enable HTTP/2 adaptive flow control.
+    pub fn http2_adaptive_window(mut self, enabled: bool) -> Self {
+        self.http2.adaptive_window = Some(enabled);
+        self
+    }
+
+    /// Set the maximum HTTP/2 frame size (bytes).
+    pub fn max_frame_size(mut self, size: u32) -> Self {
+        self.http2.max_frame_size = Some(size);
+        self
+    }
+
+    /// Set the HTTP/2 keep-alive interval.
+    pub fn http2_keep_alive_interval(mut self, interval: Duration) -> Self {
+        self.http2.keep_alive_interval = Some(interval);
+        self
+    }
+
+    /// Set the HTTP/2 keep-alive timeout.
+    pub fn http2_keep_alive_timeout(mut self, timeout: Duration) -> Self {
+        self.http2.keep_alive_timeout = Some(timeout);
         self
     }
 
@@ -88,18 +137,21 @@ impl Endpoint {
     /// and `timeout` (if set) as a per-request deadline on the returned channel.
     pub async fn connect(&self) -> Result<Channel, BoxError> {
         let uri = self.uri.clone();
+        let http2 = self.http2.clone();
         let connect_fut = async {
             #[cfg(feature = "tls")]
             {
                 match &self.tls {
-                    TlsMode::None => Channel::connect(uri).await,
-                    TlsMode::Native => Channel::connect_tls(uri).await,
-                    TlsMode::CustomCa(ca) => Channel::connect_with_ca(uri, ca).await,
+                    TlsMode::None => Channel::connect_with_h2_config(uri, http2).await,
+                    TlsMode::Native => Channel::connect_tls_with_h2_config(uri, http2).await,
+                    TlsMode::CustomCa(ca) => {
+                        Channel::connect_with_ca_and_h2_config(uri, ca, http2).await
+                    }
                 }
             }
             #[cfg(not(feature = "tls"))]
             {
-                Channel::connect(uri).await
+                Channel::connect_with_h2_config(uri, http2).await
             }
         };
 
@@ -168,11 +220,25 @@ mod tests {
         assert_eq!(ep.connect_timeout, Some(Duration::from_secs(1)));
     }
 
+    #[test]
+    fn endpoint_http2_options() {
+        let ep = Endpoint::from_static("http://localhost:50051")
+            .initial_stream_window_size(1024 * 1024)
+            .initial_connection_window_size(2 * 1024 * 1024)
+            .http2_adaptive_window(true)
+            .max_frame_size(32768);
+        assert_eq!(ep.http2.initial_stream_window_size, Some(1024 * 1024));
+        assert_eq!(
+            ep.http2.initial_connection_window_size,
+            Some(2 * 1024 * 1024)
+        );
+        assert_eq!(ep.http2.adaptive_window, Some(true));
+        assert_eq!(ep.http2.max_frame_size, Some(32768));
+    }
+
     #[tokio::test]
     async fn endpoint_connect_returns_channel() {
         let ep = Endpoint::from_static("http://127.0.0.1:50051");
-        // connect() is lazy (no actual TCP connection until first request),
-        // so this should always succeed
         let channel = ep.connect().await;
         assert!(channel.is_ok());
         assert_eq!(channel.unwrap().uri().host(), Some("127.0.0.1"));
@@ -182,7 +248,6 @@ mod tests {
     async fn endpoint_connect_propagates_timeout() {
         let ep = Endpoint::from_static("http://127.0.0.1:50051").timeout(Duration::from_secs(5));
         let channel = ep.connect().await.unwrap();
-        // Timeout is stored internally on the channel; verify channel was created
         assert_eq!(channel.uri().host(), Some("127.0.0.1"));
     }
 }

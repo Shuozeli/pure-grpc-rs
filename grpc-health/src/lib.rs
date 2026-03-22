@@ -84,7 +84,9 @@ impl HealthHandle {
         // Notify any watchers
         let watchers = self.state.watchers.read().await;
         if let Some(tx) = watchers.get(&service) {
-            let _ = tx.send(status);
+            if tx.send(status).is_err() {
+                tracing::trace!(service = %service, "health watch: all receivers dropped");
+            }
         }
     }
 
