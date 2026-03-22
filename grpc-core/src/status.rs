@@ -599,4 +599,137 @@ mod tests {
         let err = infer_grpc_status(None, http::StatusCode::NOT_FOUND).unwrap_err();
         assert_eq!(err.unwrap().code(), Code::NotFound);
     }
+
+    // ---- C1: from_header_map with missing grpc-status ----
+
+    #[test]
+    fn from_header_map_returns_none_without_grpc_status() {
+        let headers = HeaderMap::new();
+        assert!(Status::from_header_map(&headers).is_none());
+    }
+
+    // ---- C3: from_header_map with invalid base64 details ----
+
+    #[test]
+    fn from_header_map_invalid_base64_details() {
+        let mut headers = HeaderMap::new();
+        headers.insert("grpc-status", "13".parse().unwrap());
+        headers.insert(
+            "grpc-status-details-bin",
+            "not!valid!base64!".parse().unwrap(),
+        );
+
+        let status = Status::from_header_map(&headers).unwrap();
+        assert_eq!(status.code(), Code::Internal);
+        assert!(status.message().contains("invalid base64"));
+    }
+
+    // ---- C5: into_http fallback when message encoding fails ----
+
+    #[test]
+    fn into_http_with_empty_message() {
+        let status = Status::new(Code::Internal, "");
+        let resp: http::Response<()> = status.into_http();
+        // Should not have grpc-message header when message is empty
+        assert!(resp.headers().get("grpc-message").is_none());
+        assert_eq!(resp.headers().get("grpc-status").unwrap(), "13");
+    }
+
+    // ---- C6: From<io::Error> additional variants ----
+
+    #[test]
+    fn from_io_error_additional_variants() {
+        use std::io;
+
+        let cases = vec![
+            (io::ErrorKind::BrokenPipe, Code::Internal),
+            (io::ErrorKind::WouldBlock, Code::Internal),
+            (io::ErrorKind::WriteZero, Code::Internal),
+            (io::ErrorKind::Interrupted, Code::Internal),
+            (io::ErrorKind::ConnectionReset, Code::Unavailable),
+            (io::ErrorKind::NotConnected, Code::Unavailable),
+            (io::ErrorKind::AddrInUse, Code::Unavailable),
+            (io::ErrorKind::AddrNotAvailable, Code::Unavailable),
+            (io::ErrorKind::AlreadyExists, Code::AlreadyExists),
+            (io::ErrorKind::ConnectionAborted, Code::Aborted),
+            (io::ErrorKind::InvalidData, Code::DataLoss),
+            (io::ErrorKind::InvalidInput, Code::InvalidArgument),
+            (io::ErrorKind::PermissionDenied, Code::PermissionDenied),
+            (io::ErrorKind::UnexpectedEof, Code::OutOfRange),
+            (io::ErrorKind::Other, Code::Unknown),
+        ];
+
+        for (kind, expected_code) in cases {
+            let err = io::Error::new(kind, "test");
+            let status: Status = err.into();
+            assert_eq!(
+                status.code(),
+                expected_code,
+                "io::ErrorKind::{kind:?} should map to {expected_code:?}"
+            );
+        }
+    }
+
+    // ---- C7: set_source and Error::source() ----
+
+    #[test]
+    fn set_source_and_retrieve() {
+        let mut status = Status::new(Code::Internal, "wrapped");
+        let source_err = std::io::Error::new(std::io::ErrorKind::Other, "root cause");
+        status.set_source(Arc::new(source_err));
+
+        let src = std::error::Error::source(&status).unwrap();
+        assert!(format!("{src}").contains("root cause"));
+    }
+
+    // ---- C8: infer_grpc_status unmapped HTTP status codes ----
+
+    #[test]
+    fn infer_grpc_status_unmapped_http_codes() {
+        // 418 I'm a Teapot — unmapped, should produce Unknown
+        let err = infer_grpc_status(None, http::StatusCode::IM_A_TEAPOT).unwrap_err();
+        assert_eq!(err.unwrap().code(), Code::Unknown);
+
+        // 500 Internal Server Error — unmapped
+        let err = infer_grpc_status(None, http::StatusCode::INTERNAL_SERVER_ERROR).unwrap_err();
+        assert_eq!(err.unwrap().code(), Code::Unknown);
+    }
+
+    // ---- C31: compression from_encoding_header rejection ----
+
+    #[test]
+    fn from_header_map_with_only_status_and_message() {
+        let mut headers = HeaderMap::new();
+        headers.insert("grpc-status", "2".parse().unwrap());
+        headers.insert("grpc-message", "something%20wrong".parse().unwrap());
+
+        let status = Status::from_header_map(&headers).unwrap();
+        assert_eq!(status.code(), Code::Unknown);
+        assert_eq!(status.message(), "something wrong");
+    }
+
+    #[test]
+    fn from_header_map_with_metadata() {
+        let mut headers = HeaderMap::new();
+        headers.insert("grpc-status", "0".parse().unwrap());
+        headers.insert("x-custom-header", "custom-value".parse().unwrap());
+
+        let status = Status::from_header_map(&headers).unwrap();
+        assert_eq!(status.code(), Code::Ok);
+        // metadata should contain the custom header
+        assert!(status.metadata().get("x-custom-header").is_some());
+    }
+
+    #[test]
+    fn status_with_details_and_metadata() {
+        let mut metadata = crate::MetadataMap::new();
+        metadata.insert("x-req-id", "abc123".parse().unwrap());
+        let details = Bytes::from_static(b"\x01\x02\x03");
+
+        let status =
+            Status::with_details_and_metadata(Code::NotFound, "nope", details.clone(), metadata);
+        assert_eq!(status.code(), Code::NotFound);
+        assert_eq!(status.details(), &details[..]);
+        assert_eq!(status.metadata().get("x-req-id").unwrap(), "abc123");
+    }
 }

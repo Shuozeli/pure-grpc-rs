@@ -309,3 +309,369 @@ impl<T> fmt::Debug for Streaming<T> {
         f.debug_struct("Streaming").finish()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bytes::Bytes;
+    use http_body::Frame;
+    use http_body_util::StreamBody;
+
+    /// Trivial decoder that returns raw bytes as Vec<u8>.
+    struct RawDecoder;
+
+    impl Decoder for RawDecoder {
+        type Item = Vec<u8>;
+        type Error = Status;
+
+        fn decode(&mut self, src: &mut DecodeBuf<'_>) -> Result<Option<Vec<u8>>, Status> {
+            let len = src.remaining();
+            if len == 0 {
+                return Ok(None);
+            }
+            let mut data = vec![0u8; len];
+            src.copy_to_slice(&mut data);
+            Ok(Some(data))
+        }
+    }
+
+    /// Build a gRPC frame: [compression_flag: u8][length: u32 BE][payload].
+    fn grpc_frame(compression_flag: u8, payload: &[u8]) -> Bytes {
+        let mut buf = BytesMut::with_capacity(HEADER_SIZE + payload.len());
+        buf.put_u8(compression_flag);
+        buf.put_u32(payload.len() as u32);
+        buf.put_slice(payload);
+        buf.freeze()
+    }
+
+    /// Create a Streaming from a list of data frames.
+    fn streaming_from_frames(frames: Vec<Bytes>) -> Streaming<Vec<u8>> {
+        let body_stream =
+            tokio_stream::iter(frames.into_iter().map(|b| Ok::<_, Status>(Frame::data(b))));
+        let body = StreamBody::new(body_stream);
+        Streaming::new_response(RawDecoder, body, StatusCode::OK, None, None)
+    }
+
+    /// Create a Streaming from data frames + trailer frame.
+    fn streaming_with_trailers(frames: Vec<Bytes>, trailers: HeaderMap) -> Streaming<Vec<u8>> {
+        let mut items: Vec<Result<Frame<Bytes>, Status>> =
+            frames.into_iter().map(|b| Ok(Frame::data(b))).collect();
+        items.push(Ok(Frame::trailers(trailers)));
+        let body_stream = tokio_stream::iter(items);
+        let body = StreamBody::new(body_stream);
+        Streaming::new_response(RawDecoder, body, StatusCode::OK, None, None)
+    }
+
+    // ---------------------------------------------------------------
+    // decode_chunk: ReadHeader state
+    // ---------------------------------------------------------------
+
+    #[tokio::test]
+    async fn decode_single_uncompressed_message() {
+        let payload = b"hello";
+        let frame = grpc_frame(0, payload);
+        let mut streaming = streaming_from_frames(vec![frame]);
+
+        let msg = streaming.message().await.unwrap().unwrap();
+        assert_eq!(msg, b"hello");
+
+        // No more messages
+        assert!(streaming.message().await.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn decode_multiple_messages_in_one_frame() {
+        let mut buf = BytesMut::new();
+        // Two messages packed into a single body frame
+        buf.extend_from_slice(&grpc_frame(0, b"first"));
+        buf.extend_from_slice(&grpc_frame(0, b"second"));
+        let frame = buf.freeze();
+
+        let mut streaming = streaming_from_frames(vec![frame]);
+
+        let msg1 = streaming.message().await.unwrap().unwrap();
+        assert_eq!(msg1, b"first");
+        let msg2 = streaming.message().await.unwrap().unwrap();
+        assert_eq!(msg2, b"second");
+        assert!(streaming.message().await.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn decode_message_split_across_frames() {
+        // Header in first frame, payload in second
+        let mut header = BytesMut::new();
+        header.put_u8(0); // no compression
+        header.put_u32(5); // length = 5
+
+        let part1 = header.freeze();
+        let part2 = Bytes::from_static(b"hello");
+
+        let mut streaming = streaming_from_frames(vec![part1, part2]);
+
+        let msg = streaming.message().await.unwrap().unwrap();
+        assert_eq!(msg, b"hello");
+    }
+
+    // ---------------------------------------------------------------
+    // decode_chunk: compression flags
+    // ---------------------------------------------------------------
+
+    #[tokio::test]
+    async fn decode_compressed_flag_without_encoding_errors() {
+        // Compression flag=1 but no encoding specified
+        let frame = grpc_frame(1, b"data");
+        let mut streaming = streaming_from_frames(vec![frame]);
+
+        let err = streaming.message().await.unwrap_err();
+        assert_eq!(err.code(), Code::Internal);
+        assert!(err.message().contains("no grpc-encoding"));
+    }
+
+    #[tokio::test]
+    async fn decode_invalid_compression_flag() {
+        // Compression flag=2 (invalid)
+        let frame = grpc_frame(2, b"data");
+        let mut streaming = streaming_from_frames(vec![frame]);
+
+        let err = streaming.message().await.unwrap_err();
+        assert_eq!(err.code(), Code::Internal);
+        assert!(err.message().contains("invalid compression flag: 2"));
+    }
+
+    #[tokio::test]
+    async fn decode_invalid_compression_flag_255() {
+        let frame = grpc_frame(255, b"data");
+        let mut streaming = streaming_from_frames(vec![frame]);
+
+        let err = streaming.message().await.unwrap_err();
+        assert_eq!(err.code(), Code::Internal);
+        assert!(err.message().contains("invalid compression flag: 255"));
+    }
+
+    // ---------------------------------------------------------------
+    // decode_chunk: message size limits
+    // ---------------------------------------------------------------
+
+    #[tokio::test]
+    async fn decode_message_exceeds_size_limit() {
+        let payload = vec![0u8; 100];
+        let frame = grpc_frame(0, &payload);
+
+        // Create streaming with 50-byte limit
+        let body_stream = tokio_stream::iter(vec![Ok::<_, Status>(Frame::data(frame))]);
+        let body = StreamBody::new(body_stream);
+        let mut streaming =
+            Streaming::new_response(RawDecoder, body, StatusCode::OK, None, Some(50));
+
+        let err = streaming.message().await.unwrap_err();
+        assert_eq!(err.code(), Code::OutOfRange);
+        assert!(err.message().contains("100 bytes"));
+        assert!(err.message().contains("50 bytes"));
+    }
+
+    #[tokio::test]
+    async fn decode_message_at_exact_size_limit() {
+        let payload = vec![0u8; 50];
+        let frame = grpc_frame(0, &payload);
+
+        let body_stream = tokio_stream::iter(vec![Ok::<_, Status>(Frame::data(frame))]);
+        let body = StreamBody::new(body_stream);
+        let mut streaming =
+            Streaming::new_response(RawDecoder, body, StatusCode::OK, None, Some(50));
+
+        // Exactly at limit should succeed
+        let msg = streaming.message().await.unwrap().unwrap();
+        assert_eq!(msg.len(), 50);
+    }
+
+    // ---------------------------------------------------------------
+    // decode_chunk: with compression
+    // ---------------------------------------------------------------
+
+    #[cfg(feature = "gzip")]
+    #[tokio::test]
+    async fn decode_gzip_compressed_message() {
+        use super::super::compression::{compress, CompressionEncoding};
+
+        let original = b"hello compressed world";
+        let mut compressed = BytesMut::new();
+        compress(CompressionEncoding::Gzip, original, &mut compressed).unwrap();
+
+        let frame = grpc_frame(1, &compressed);
+        let body_stream = tokio_stream::iter(vec![Ok::<_, Status>(Frame::data(frame))]);
+        let body = StreamBody::new(body_stream);
+        let mut streaming = Streaming::new_response(
+            RawDecoder,
+            body,
+            StatusCode::OK,
+            Some(CompressionEncoding::Gzip),
+            None,
+        );
+
+        let msg = streaming.message().await.unwrap().unwrap();
+        assert_eq!(msg, original);
+    }
+
+    // ---------------------------------------------------------------
+    // poll_frame: body errors
+    // ---------------------------------------------------------------
+
+    #[tokio::test]
+    async fn decode_body_error_on_request() {
+        // Request direction: Cancelled errors become None (EOF)
+        let body_stream = tokio_stream::iter(vec![Err::<Frame<Bytes>, Status>(Status::cancelled(
+            "client gone",
+        ))]);
+        let body = StreamBody::new(body_stream);
+        let mut streaming = Streaming::new_request(RawDecoder, body, None, None);
+
+        // Cancelled on request → graceful EOF
+        assert!(streaming.message().await.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn decode_body_error_on_response() {
+        // Response direction: errors propagate
+        let body_stream = tokio_stream::iter(vec![Err::<Frame<Bytes>, Status>(
+            Status::unavailable("server down"),
+        )]);
+        let body = StreamBody::new(body_stream);
+        let mut streaming = Streaming::new_response(RawDecoder, body, StatusCode::OK, None, None);
+
+        let err = streaming.message().await.unwrap_err();
+        assert_eq!(err.code(), Code::Unavailable);
+    }
+
+    // ---------------------------------------------------------------
+    // poll_frame: EOF with partial data
+    // ---------------------------------------------------------------
+
+    #[tokio::test]
+    async fn decode_unexpected_eof_with_partial_header() {
+        // Only 3 bytes — not enough for a 5-byte header
+        let partial = Bytes::from_static(&[0, 0, 0]);
+        let mut streaming = streaming_from_frames(vec![partial]);
+
+        let err = streaming.message().await.unwrap_err();
+        assert_eq!(err.code(), Code::Internal);
+        assert!(err.message().contains("Unexpected EOF"));
+    }
+
+    #[tokio::test]
+    async fn decode_clean_eof_empty_body() {
+        let mut streaming = streaming_from_frames(vec![]);
+        assert!(streaming.message().await.unwrap().is_none());
+    }
+
+    // ---------------------------------------------------------------
+    // trailers
+    // ---------------------------------------------------------------
+
+    #[tokio::test]
+    async fn decode_with_trailers() {
+        let frame = grpc_frame(0, b"msg");
+        let mut trailers = HeaderMap::new();
+        trailers.insert("grpc-status", "0".parse().unwrap());
+        trailers.insert("custom-trailer", "value".parse().unwrap());
+
+        let mut streaming = streaming_with_trailers(vec![frame], trailers);
+
+        let msg = streaming.message().await.unwrap().unwrap();
+        assert_eq!(msg, b"msg");
+
+        // Drain remaining
+        assert!(streaming.message().await.unwrap().is_none());
+
+        // Check trailers
+        let t = streaming.trailers().await.unwrap().unwrap();
+        assert_eq!(t.get("custom-trailer").unwrap(), "value");
+    }
+
+    #[tokio::test]
+    async fn trailers_method_drains_remaining_messages() {
+        let mut buf = BytesMut::new();
+        buf.extend_from_slice(&grpc_frame(0, b"m1"));
+        buf.extend_from_slice(&grpc_frame(0, b"m2"));
+        let data = buf.freeze();
+
+        let mut trailers = HeaderMap::new();
+        trailers.insert("grpc-status", "0".parse().unwrap());
+
+        let mut streaming = streaming_with_trailers(vec![data], trailers);
+
+        // Call trailers() directly without consuming messages first
+        let t = streaming.trailers().await.unwrap().unwrap();
+        assert!(t.get("grpc-status").is_some());
+    }
+
+    // ---------------------------------------------------------------
+    // Error state machine
+    // ---------------------------------------------------------------
+
+    #[tokio::test]
+    async fn error_state_persists() {
+        let frame = grpc_frame(2, b"bad"); // invalid flag
+        let mut streaming = streaming_from_frames(vec![frame]);
+
+        // First call: error from invalid compression flag
+        let err = streaming.message().await.unwrap_err();
+        assert_eq!(err.code(), Code::Internal);
+        assert!(err.message().contains("invalid compression flag"));
+
+        // Second call: also error (unexpected EOF since body was consumed)
+        let err2 = streaming.message().await.unwrap_err();
+        assert_eq!(err2.code(), Code::Internal);
+    }
+
+    // ---------------------------------------------------------------
+    // Constructors
+    // ---------------------------------------------------------------
+
+    #[tokio::test]
+    async fn new_empty_returns_none_immediately() {
+        let body_stream = tokio_stream::iter(Vec::<Result<Frame<Bytes>, Status>>::new());
+        let body = StreamBody::new(body_stream);
+        let mut streaming = Streaming::new_empty(RawDecoder, body);
+
+        assert!(streaming.message().await.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn new_request_constructor() {
+        let frame = grpc_frame(0, b"request_data");
+        let body_stream = tokio_stream::iter(vec![Ok::<_, Status>(Frame::data(frame))]);
+        let body = StreamBody::new(body_stream);
+        let mut streaming = Streaming::new_request(RawDecoder, body, None, None);
+
+        let msg = streaming.message().await.unwrap().unwrap();
+        assert_eq!(msg, b"request_data");
+    }
+
+    // ---------------------------------------------------------------
+    // infer_grpc_status in response()
+    // ---------------------------------------------------------------
+
+    #[tokio::test]
+    async fn response_with_error_status_in_trailers() {
+        let frame = grpc_frame(0, b"data");
+        let mut trailers = HeaderMap::new();
+        trailers.insert("grpc-status", "13".parse().unwrap()); // Internal
+        trailers.insert("grpc-message", "something broke".parse().unwrap());
+
+        let mut streaming = streaming_with_trailers(vec![frame], trailers);
+
+        // First message succeeds
+        let msg = streaming.message().await.unwrap().unwrap();
+        assert_eq!(msg, b"data");
+
+        // Next call hits trailers → infer error status
+        let err = streaming.message().await.unwrap_err();
+        assert_eq!(err.code(), Code::Internal);
+    }
+
+    #[test]
+    fn streaming_is_debug() {
+        fn assert_debug<T: fmt::Debug>() {}
+        assert_debug::<Streaming<Vec<u8>>>();
+    }
+}

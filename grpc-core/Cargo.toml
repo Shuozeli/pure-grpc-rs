@@ -10,6 +10,7 @@ license = "MIT"
 default = ["prost-codec"]
 prost-codec = ["prost"]
 gzip = ["flate2"]
+deflate = ["flate2"]
 zstd = ["dep:zstd"]
 
 [dependencies]

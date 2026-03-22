@@ -10,6 +10,8 @@ license = "MIT"
 default = []
 tls = ["rustls", "tokio-rustls", "rustls-pemfile"]
 gzip = ["grpc-core/gzip"]
+deflate = ["grpc-core/deflate"]
+zstd = ["grpc-core/zstd"]
 
 [dependencies]
 grpc-core = { path = "../grpc-core", version = "0.1.0" }

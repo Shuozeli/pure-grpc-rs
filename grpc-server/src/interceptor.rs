@@ -186,4 +186,50 @@ mod tests {
         let resp = intercepted.call(req).await.unwrap();
         assert_eq!(resp.status(), 200);
     }
+
+    // S15: Interceptor metadata modification — not just read/reject
+    #[derive(Clone)]
+    struct HeaderCheckService;
+
+    impl Service<Request<Body>> for HeaderCheckService {
+        type Response = Response<Body>;
+        type Error = Infallible;
+        type Future = std::future::Ready<Result<Response<Body>, Infallible>>;
+
+        fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+            Poll::Ready(Ok(()))
+        }
+
+        fn call(&mut self, req: Request<Body>) -> Self::Future {
+            // Check if the interceptor-injected header is present
+            let has_injected = req.headers().get("x-request-id").is_some();
+            let mut resp = Response::new(Body::empty());
+            resp.headers_mut().insert(
+                "x-has-injected",
+                http::HeaderValue::from_str(if has_injected { "true" } else { "false" }).unwrap(),
+            );
+            std::future::ready(Ok(resp))
+        }
+    }
+
+    #[tokio::test]
+    async fn interceptor_modifies_metadata() {
+        let svc = HeaderCheckService;
+        let interceptor = |mut req: grpc_core::Request<()>| {
+            // Inject a new header via the interceptor
+            req.metadata_mut()
+                .insert("x-request-id", "injected-id-123".parse().unwrap());
+            Ok(req)
+        };
+        let mut intercepted = InterceptedService::new(svc, interceptor);
+
+        let req = Request::builder()
+            .uri("/test.Svc/Method")
+            .body(Body::empty())
+            .unwrap();
+
+        let resp = intercepted.call(req).await.unwrap();
+        assert_eq!(resp.status(), 200);
+        assert_eq!(resp.headers().get("x-has-injected").unwrap(), "true");
+    }
 }

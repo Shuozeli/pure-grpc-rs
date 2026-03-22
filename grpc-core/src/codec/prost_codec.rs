@@ -129,4 +129,34 @@ mod tests {
         let _encoder = codec.encoder();
         let _decoder = codec.decoder();
     }
+
+    #[test]
+    fn prost_decoder_rejects_malformed_bytes() {
+        let mut decoder = ProstDecoder::<()>::default();
+
+        // Feed invalid protobuf bytes (varint that claims a field we don't expect)
+        // For an empty message type, any non-empty data with a valid field tag
+        // is silently ignored by prost. But truly malformed varint should fail.
+        let mut bytes = BytesMut::from(&[0x80u8, 0x80, 0x80, 0x80, 0x80, 0x80][..]);
+        let len = bytes.len();
+        let mut buf = DecodeBuf::new(&mut bytes, len);
+        let result = decoder.decode(&mut buf);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code(), crate::Code::Internal);
+    }
+
+    #[test]
+    fn prost_codec_buffer_settings() {
+        let mut codec = ProstCodec::<(), ()>::default();
+        let encoder = codec.encoder();
+        let settings = encoder.buffer_settings();
+        assert_eq!(
+            settings.buffer_size,
+            super::super::DEFAULT_CODEC_BUFFER_SIZE
+        );
+        assert_eq!(
+            settings.yield_threshold,
+            super::super::DEFAULT_YIELD_THRESHOLD
+        );
+    }
 }

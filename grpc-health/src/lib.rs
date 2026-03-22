@@ -362,4 +362,21 @@ mod tests {
         let msg = stream.next().await.unwrap().unwrap();
         assert_eq!(msg.status, ServingStatus::Serving as i32);
     }
+
+    // H1: Unknown path in HealthServer::call — returns Unimplemented
+    #[tokio::test]
+    async fn unknown_path_returns_unimplemented() {
+        let (mut server, _handle) = health_service();
+
+        let req = http::Request::builder()
+            .uri("/grpc.health.v1.Health/UnknownMethod")
+            .body(grpc_core::body::Body::empty())
+            .unwrap();
+
+        let resp = tower_service::Service::call(&mut server, req)
+            .await
+            .unwrap();
+        let status = resp.headers().get("grpc-status").unwrap();
+        assert_eq!(status, "12"); // Code::Unimplemented
+    }
 }

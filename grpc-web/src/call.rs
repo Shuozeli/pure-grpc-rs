@@ -263,6 +263,53 @@ mod tests {
         assert_eq!(decoded[0], 0x80);
     }
 
+    /// W3: encode_trailers with multiple headers preserves all entries.
+    #[test]
+    fn encode_trailers_multiple_headers() {
+        let mut trailers = HeaderMap::new();
+        trailers.insert("grpc-status", "0".parse().unwrap());
+        trailers.insert("grpc-message", "OK".parse().unwrap());
+        trailers.insert("custom-trailer", "some-value".parse().unwrap());
+
+        let frame = encode_trailers(&trailers, &Encoding::Binary);
+
+        // Flag byte
+        assert_eq!(frame[0], 0x80);
+
+        // Decode length
+        let len = u32::from_be_bytes([frame[1], frame[2], frame[3], frame[4]]) as usize;
+        let content =
+            std::str::from_utf8(&frame[GRPC_HEADER_SIZE..GRPC_HEADER_SIZE + len]).unwrap();
+
+        assert!(content.contains("grpc-status:0"), "missing grpc-status");
+        assert!(content.contains("grpc-message:OK"), "missing grpc-message");
+        assert!(
+            content.contains("custom-trailer:some-value"),
+            "missing custom-trailer"
+        );
+
+        // Each header line ends with \r\n
+        let line_count = content.matches("\r\n").count();
+        assert_eq!(line_count, 3, "should have 3 trailer lines");
+    }
+
+    /// W3 (base64): encode_trailers with multiple headers in base64 mode.
+    #[test]
+    fn encode_trailers_multiple_headers_base64() {
+        let mut trailers = HeaderMap::new();
+        trailers.insert("grpc-status", "0".parse().unwrap());
+        trailers.insert("grpc-message", "success".parse().unwrap());
+
+        let frame = encode_trailers(&trailers, &Encoding::Base64);
+        let decoded = BASE64.decode(&frame).unwrap();
+        assert_eq!(decoded[0], 0x80);
+        let len = u32::from_be_bytes([decoded[1], decoded[2], decoded[3], decoded[4]]) as usize;
+        let content =
+            std::str::from_utf8(&decoded[GRPC_HEADER_SIZE..GRPC_HEADER_SIZE + len]).unwrap();
+        assert!(content.contains("grpc-status:0"));
+        assert!(content.contains("grpc-message:success"));
+    }
+
     #[test]
     fn encode_empty_trailers() {
         let trailers = HeaderMap::new();
@@ -270,6 +317,165 @@ mod tests {
         assert_eq!(frame[0], 0x80);
         assert_eq!(
             u32::from_be_bytes([frame[1], frame[2], frame[3], frame[4]]),
+            0
+        );
+    }
+
+    // --- GrpcWebCall integration tests ---
+
+    use http_body::Body as _;
+    use std::collections::VecDeque;
+    use std::task::Wake;
+
+    /// A simple body implementation for testing that yields pre-configured frames.
+    struct MockBody {
+        frames: VecDeque<Frame<Bytes>>,
+    }
+
+    impl MockBody {
+        fn from_frames(frames: Vec<Frame<Bytes>>) -> Self {
+            Self {
+                frames: frames.into(),
+            }
+        }
+    }
+
+    impl http_body::Body for MockBody {
+        type Data = Bytes;
+        type Error = std::convert::Infallible;
+
+        fn poll_frame(
+            mut self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+        ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
+            match self.frames.pop_front() {
+                Some(frame) => Poll::Ready(Some(Ok(frame))),
+                None => Poll::Ready(None),
+            }
+        }
+    }
+
+    /// Helper to poll a body to completion, collecting all data frames.
+    fn poll_all_frames(mut body: GrpcWebCall<MockBody>) -> Vec<Bytes> {
+        let waker = std::sync::Arc::new(NoopWaker).into();
+        let mut cx = Context::from_waker(&waker);
+        let mut results = Vec::new();
+
+        loop {
+            let pinned = Pin::new(&mut body);
+            match pinned.poll_frame(&mut cx) {
+                Poll::Ready(Some(Ok(frame))) => {
+                    if let Some(data) = frame.data_ref() {
+                        results.push(data.clone());
+                    }
+                }
+                Poll::Ready(Some(Err(_))) => panic!("unexpected error"),
+                Poll::Ready(None) => break,
+                Poll::Pending => {
+                    // Re-poll (waker was woken for trailer capture)
+                    continue;
+                }
+            }
+        }
+        results
+    }
+
+    struct NoopWaker;
+    impl Wake for NoopWaker {
+        fn wake(self: std::sync::Arc<Self>) {}
+    }
+
+    /// W7/roundtrip: Request decode in base64 mode — feed base64-encoded data, get decoded output.
+    #[test]
+    fn grpc_web_call_request_base64_decode() {
+        // Create a small binary payload and base64-encode it
+        let payload = Bytes::from_static(b"\x00\x00\x00\x00\x05hello");
+        let encoded = BASE64.encode(&payload);
+
+        let body = MockBody::from_frames(vec![Frame::data(Bytes::from(encoded))]);
+        let call = GrpcWebCall::request(body, Encoding::Base64);
+
+        let frames = poll_all_frames(call);
+        assert_eq!(frames.len(), 1);
+        assert_eq!(frames[0], payload);
+    }
+
+    /// Request decode in binary mode — data passes through unchanged.
+    #[test]
+    fn grpc_web_call_request_binary_passthrough() {
+        let payload = Bytes::from_static(b"\x00\x00\x00\x00\x05hello");
+
+        let body = MockBody::from_frames(vec![Frame::data(payload.clone())]);
+        let call = GrpcWebCall::request(body, Encoding::Binary);
+
+        let frames = poll_all_frames(call);
+        assert_eq!(frames.len(), 1);
+        assert_eq!(frames[0], payload);
+    }
+
+    /// Response encode in binary mode: data frames + trailers-in-body.
+    #[test]
+    fn grpc_web_call_response_binary_trailers_in_body() {
+        let data_payload = Bytes::from_static(b"\x00\x00\x00\x00\x05hello");
+
+        let mut trailer_map = HeaderMap::new();
+        trailer_map.insert("grpc-status", "0".parse().unwrap());
+
+        let body = MockBody::from_frames(vec![
+            Frame::data(data_payload.clone()),
+            Frame::trailers(trailer_map),
+        ]);
+        let call = GrpcWebCall::response(body, Encoding::Binary);
+
+        let frames = poll_all_frames(call);
+
+        // First frame should be the data
+        assert_eq!(frames[0], data_payload);
+
+        // Second frame should be encoded trailers (flag=0x80)
+        assert!(
+            frames.len() >= 2,
+            "should have at least 2 frames (data + trailers)"
+        );
+        let trailer_frame = &frames[1];
+        assert_eq!(
+            trailer_frame[0], 0x80,
+            "trailer frame should have flag 0x80"
+        );
+    }
+
+    /// Response encode in base64 mode: data is base64-encoded.
+    #[test]
+    fn grpc_web_call_response_base64_encoding() {
+        let data_payload = Bytes::from_static(b"\x00\x00\x00\x00\x05hello");
+
+        let body = MockBody::from_frames(vec![Frame::data(data_payload.clone())]);
+        let call = GrpcWebCall::response(body, Encoding::Base64);
+
+        let frames = poll_all_frames(call);
+
+        // First frame should be base64-encoded
+        let decoded = BASE64.decode(&frames[0]).unwrap();
+        assert_eq!(Bytes::from(decoded), data_payload);
+    }
+
+    /// Response encode: empty body still emits trailer frame.
+    #[test]
+    fn grpc_web_call_response_empty_body_emits_trailers() {
+        let body = MockBody::from_frames(vec![]);
+        let call = GrpcWebCall::response(body, Encoding::Binary);
+
+        let frames = poll_all_frames(call);
+
+        // Should emit an empty trailer frame
+        assert!(
+            !frames.is_empty(),
+            "should emit at least one frame for trailers"
+        );
+        assert_eq!(frames[0][0], 0x80, "should be a trailer frame");
+        // Length should be 0 (empty trailers)
+        assert_eq!(
+            u32::from_be_bytes([frames[0][1], frames[0][2], frames[0][3], frames[0][4]]),
             0
         );
     }

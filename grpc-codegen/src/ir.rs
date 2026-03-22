@@ -172,4 +172,39 @@ mod tests {
         let errors = svc.validate();
         assert!(errors.iter().any(|e| e.contains("contains '/'")));
     }
+
+    /// G1: Test comments_to_doc_tokens directly.
+    #[test]
+    fn comments_to_doc_tokens_empty() {
+        let tokens = comments_to_doc_tokens(&[]);
+        assert!(tokens.is_empty(), "no comments should produce empty tokens");
+    }
+
+    /// G1: Test comments_to_doc_tokens with single comment.
+    #[test]
+    fn comments_to_doc_tokens_single() {
+        let tokens = comments_to_doc_tokens(&["Hello world".into()]);
+        let s = tokens.to_string();
+        assert!(s.contains("doc"), "should produce #[doc] attributes");
+        assert!(s.contains("Hello world"), "should contain comment text");
+    }
+
+    /// G1: Test comments_to_doc_tokens with multiple comments.
+    #[test]
+    fn comments_to_doc_tokens_multiple() {
+        let comments = vec![
+            "First line".into(),
+            "Second line".into(),
+            "Third line".into(),
+        ];
+        let tokens = comments_to_doc_tokens(&comments);
+        let s = tokens.to_string();
+
+        // Should produce three #[doc] attributes
+        let doc_count = s.matches("doc").count();
+        assert_eq!(doc_count, 3, "should produce 3 doc attributes, got: {s}");
+        assert!(s.contains("First line"));
+        assert!(s.contains("Second line"));
+        assert!(s.contains("Third line"));
+    }
 }

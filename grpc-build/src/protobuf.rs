@@ -167,6 +167,71 @@ mod tests {
         assert_eq!(package_to_mod_name(""), "_.rs");
     }
 
+    /// B1: compile_protos returns error when OUT_DIR is not set.
+    #[test]
+    fn compile_protos_error_when_out_dir_not_set() {
+        // Save and remove OUT_DIR
+        let saved = std::env::var("OUT_DIR").ok();
+        // SAFETY: test is single-threaded for env var manipulation
+        unsafe { std::env::remove_var("OUT_DIR") };
+
+        let result = compile_protos(&["nonexistent.proto"], &["."]);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string().contains("OUT_DIR not set"),
+            "expected OUT_DIR error, got: {err}"
+        );
+
+        // Restore
+        if let Some(val) = saved {
+            unsafe { std::env::set_var("OUT_DIR", val) };
+        }
+    }
+
+    /// B2: compile_protos returns error for non-existent proto file.
+    #[test]
+    fn compile_protos_error_nonexistent_file() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        // SAFETY: test is single-threaded for env var manipulation
+        unsafe { std::env::set_var("OUT_DIR", tmp.path().to_str().unwrap()) };
+
+        let result = compile_protos(&["/tmp/does_not_exist_12345.proto"], &["."]);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::NotFound);
+        assert!(
+            err.to_string().contains("failed to read"),
+            "expected file read error, got: {err}"
+        );
+    }
+
+    /// B3: compile_protos returns error for invalid proto syntax.
+    #[test]
+    fn compile_protos_error_invalid_syntax() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let proto_dir = tmp.path().join("proto");
+        std::fs::create_dir_all(&proto_dir).unwrap();
+
+        std::fs::write(
+            proto_dir.join("bad.proto"),
+            "this is not valid proto syntax {{{{",
+        )
+        .unwrap();
+
+        // SAFETY: test is single-threaded for env var manipulation
+        unsafe { std::env::set_var("OUT_DIR", tmp.path().to_str().unwrap()) };
+
+        let result = compile_protos(&[proto_dir.join("bad.proto")], &[&proto_dir]);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+        assert!(
+            err.to_string().contains("failed to analyze"),
+            "expected analysis error, got: {err}"
+        );
+    }
+
     #[test]
     fn compile_protos_generates_output() {
         let tmp = tempfile::TempDir::new().unwrap();
@@ -184,8 +249,8 @@ service Echo { rpc Send(Ping) returns (Pong) {} }
         )
         .unwrap();
 
-        // Set OUT_DIR for the compile
-        std::env::set_var("OUT_DIR", tmp.path().to_str().unwrap());
+        // SAFETY: test is single-threaded for env var manipulation
+        unsafe { std::env::set_var("OUT_DIR", tmp.path().to_str().unwrap()) };
 
         compile_protos(&[proto_dir.join("test.proto")], &[&proto_dir]).unwrap();
 

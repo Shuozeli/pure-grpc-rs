@@ -298,4 +298,40 @@ mod tests {
         assert_eq!(details.len(), 1);
         assert_eq!(details[0], ErrorDetail::ErrorInfo(error_info));
     }
+
+    // T1: error_details() with malformed bytes — should return DecodeError
+    #[test]
+    fn error_details_with_malformed_bytes() {
+        let malformed_bytes = Bytes::from_static(&[0xFF, 0xFE, 0xFD, 0xFC, 0xFB]);
+        let status = Status::with_details(Code::Internal, "bad details", malformed_bytes);
+        let result = status.error_details();
+        assert!(result.is_err(), "expected DecodeError for malformed bytes");
+    }
+
+    // T2: get_details_* when detail is wrong type — should return None
+    #[test]
+    fn get_details_wrong_type_returns_none() {
+        // Create a status with only an ErrorInfo detail
+        let error_info = ErrorInfo {
+            reason: "TEST".into(),
+            domain: "test.com".into(),
+            metadata: HashMap::new(),
+        };
+        let status =
+            Status::with_error_details(Code::InvalidArgument, "test", vec![error_info.into()]);
+
+        // All other detail types should return None
+        assert!(status.get_details_retry_info().is_none());
+        assert!(status.get_details_debug_info().is_none());
+        assert!(status.get_details_quota_failure().is_none());
+        assert!(status.get_details_precondition_failure().is_none());
+        assert!(status.get_details_bad_request().is_none());
+        assert!(status.get_details_request_info().is_none());
+        assert!(status.get_details_resource_info().is_none());
+        assert!(status.get_details_help().is_none());
+        assert!(status.get_details_localized_message().is_none());
+
+        // ErrorInfo should be found
+        assert!(status.get_details_error_info().is_some());
+    }
 }

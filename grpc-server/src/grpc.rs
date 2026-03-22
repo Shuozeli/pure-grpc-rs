@@ -438,4 +438,177 @@ mod tests {
         // Server should indicate gzip encoding in response
         assert_eq!(response.headers().get("grpc-encoding").unwrap(), "gzip");
     }
+
+    // S7: Unsupported compression encoding in request — server should reject
+    #[cfg(feature = "gzip")]
+    #[tokio::test]
+    async fn unsupported_encoding_in_request_rejected() {
+        // Server does NOT accept gzip — only default (none)
+        let mut grpc = Grpc::new(TestCodec);
+
+        let req = http::Request::builder()
+            .method(http::Method::POST)
+            .uri("/test.TestService/Echo")
+            .header("content-type", "application/grpc")
+            .header("grpc-encoding", "gzip")
+            .body(http_body_util::Full::new(bytes::Bytes::new()))
+            .unwrap();
+
+        let response = grpc.unary(EchoService, req).await;
+        // Should be a gRPC error response (Unimplemented)
+        let status = response.headers().get("grpc-status").unwrap();
+        assert_eq!(status, "12"); // Code::Unimplemented
+    }
+
+    // S8: Empty request message — stream yields None
+    #[tokio::test]
+    async fn empty_request_body_returns_internal_error() {
+        let mut grpc = Grpc::new(TestCodec);
+
+        // Build a request with an empty body (no gRPC frame at all)
+        let req = http::Request::builder()
+            .method(http::Method::POST)
+            .uri("/test.TestService/Echo")
+            .header("content-type", "application/grpc")
+            .body(http_body_util::Full::new(bytes::Bytes::new()))
+            .unwrap();
+
+        let response = grpc.unary(EchoService, req).await;
+        // Should get Internal error because stream yields None ("Missing request message.")
+        let status = response.headers().get("grpc-status").unwrap();
+        assert_eq!(status, "13"); // Code::Internal
+    }
+
+    // S9: Service error response — the t! macro Err path in map_response
+    struct FailingService;
+
+    impl UnaryService<Vec<u8>> for FailingService {
+        type Response = Vec<u8>;
+        type Future = std::future::Ready<Result<grpc_core::Response<Vec<u8>>, Status>>;
+
+        fn call(&mut self, _request: Request<Vec<u8>>) -> Self::Future {
+            std::future::ready(Err(Status::permission_denied("not allowed")))
+        }
+    }
+
+    #[tokio::test]
+    async fn service_error_response_maps_to_grpc_status() {
+        let mut grpc = Grpc::new(TestCodec);
+        let req = build_grpc_request(b"hello");
+
+        let response = grpc.unary(FailingService, req).await;
+        let status = response.headers().get("grpc-status").unwrap();
+        assert_eq!(status, "7"); // Code::PermissionDenied
+    }
+
+    // S10: server_streaming pattern
+    struct EchoServerStreamingService;
+
+    impl ServerStreamingService<Vec<u8>> for EchoServerStreamingService {
+        type Response = Vec<u8>;
+        type ResponseStream = std::pin::Pin<Box<dyn Stream<Item = Result<Vec<u8>, Status>> + Send>>;
+        type Future = std::future::Ready<Result<grpc_core::Response<Self::ResponseStream>, Status>>;
+
+        fn call(&mut self, request: Request<Vec<u8>>) -> Self::Future {
+            let msg = request.into_inner();
+            let stream: Self::ResponseStream =
+                Box::pin(tokio_stream::iter(vec![Ok(msg.clone()), Ok(msg)]));
+            std::future::ready(Ok(grpc_core::Response::new(stream)))
+        }
+    }
+
+    #[tokio::test]
+    async fn server_streaming_roundtrip() {
+        let mut grpc = Grpc::new(TestCodec);
+        let req = build_grpc_request(b"hello");
+
+        let response = grpc.server_streaming(EchoServerStreamingService, req).await;
+        assert_eq!(response.status(), http::StatusCode::OK);
+        assert_eq!(
+            response.headers().get("content-type").unwrap(),
+            "application/grpc"
+        );
+    }
+
+    // S11: client_streaming pattern
+    struct SumClientStreamingService;
+
+    impl ClientStreamingService<Vec<u8>> for SumClientStreamingService {
+        type Response = Vec<u8>;
+        type Future = std::pin::Pin<
+            Box<
+                dyn std::future::Future<Output = Result<grpc_core::Response<Vec<u8>>, Status>>
+                    + Send,
+            >,
+        >;
+
+        fn call(&mut self, request: Request<grpc_core::Streaming<Vec<u8>>>) -> Self::Future {
+            Box::pin(async move {
+                let mut stream = request.into_inner();
+                let mut total = 0usize;
+                while let Some(msg) = stream.message().await? {
+                    total += msg.len();
+                }
+                Ok(grpc_core::Response::new(total.to_string().into_bytes()))
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn client_streaming_roundtrip() {
+        let mut grpc = Grpc::new(TestCodec);
+        let req = build_grpc_request(b"hello");
+
+        let response = grpc.client_streaming(SumClientStreamingService, req).await;
+        assert_eq!(response.status(), http::StatusCode::OK);
+    }
+
+    // S12: bidi streaming pattern
+    struct EchoBidiService;
+
+    impl StreamingService<Vec<u8>> for EchoBidiService {
+        type Response = Vec<u8>;
+        type ResponseStream = std::pin::Pin<Box<dyn Stream<Item = Result<Vec<u8>, Status>> + Send>>;
+        type Future = std::pin::Pin<
+            Box<
+                dyn std::future::Future<
+                        Output = Result<grpc_core::Response<Self::ResponseStream>, Status>,
+                    > + Send,
+            >,
+        >;
+
+        fn call(&mut self, request: Request<grpc_core::Streaming<Vec<u8>>>) -> Self::Future {
+            Box::pin(async move {
+                let mut stream = request.into_inner();
+                let mut collected = Vec::new();
+                while let Some(msg) = stream.message().await? {
+                    collected.push(Ok(msg));
+                }
+                let response_stream: Self::ResponseStream = Box::pin(tokio_stream::iter(collected));
+                Ok(grpc_core::Response::new(response_stream))
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn bidi_streaming_roundtrip() {
+        let mut grpc = Grpc::new(TestCodec);
+        let req = build_grpc_request(b"hello");
+
+        let response = grpc.streaming(EchoBidiService, req).await;
+        assert_eq!(response.status(), http::StatusCode::OK);
+    }
+
+    // S13: Size limit enforcement
+    #[test]
+    #[should_panic(expected = "max message size must be > 0")]
+    fn max_decoding_message_size_zero_panics() {
+        Grpc::new(TestCodec).max_decoding_message_size(0);
+    }
+
+    #[test]
+    #[should_panic(expected = "max message size must be > 0")]
+    fn max_encoding_message_size_zero_panics() {
+        Grpc::new(TestCodec).max_encoding_message_size(0);
+    }
 }

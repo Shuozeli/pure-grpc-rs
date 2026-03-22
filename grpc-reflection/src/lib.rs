@@ -426,4 +426,73 @@ mod tests {
             other => panic!("expected ErrorResponse, got {other:?}"),
         }
     }
+
+    // R3: None message_request — missing oneof variant
+    #[test]
+    fn none_message_request_returns_error() {
+        let state = Arc::new(ReflectionState {
+            service_names: vec![],
+            symbols: HashMap::new(),
+            files: HashMap::new(),
+        });
+
+        let req = ServerReflectionRequest {
+            host: String::new(),
+            message_request: None,
+        };
+
+        let resp = handle_reflection_request(&state, req);
+        match resp.message_response {
+            Some(MessageResponse::ErrorResponse(err)) => {
+                assert_eq!(err.error_code, Status::invalid_argument("").code() as i32);
+                assert!(err.error_message.contains("unknown request type"));
+            }
+            other => panic!("expected ErrorResponse for None message_request, got {other:?}"),
+        }
+    }
+
+    // R4: AllExtensionNumbersOfType handler — returns unimplemented
+    #[test]
+    fn all_extension_numbers_of_type_returns_unimplemented() {
+        let state = Arc::new(ReflectionState {
+            service_names: vec![],
+            symbols: HashMap::new(),
+            files: HashMap::new(),
+        });
+
+        let req = ServerReflectionRequest {
+            host: String::new(),
+            message_request: Some(
+                proto::server_reflection_request::MessageRequest::AllExtensionNumbersOfType(
+                    "some.Type".into(),
+                ),
+            ),
+        };
+
+        let resp = handle_reflection_request(&state, req);
+        match resp.message_response {
+            Some(MessageResponse::ErrorResponse(err)) => {
+                assert_eq!(err.error_code, Status::unimplemented("").code() as i32);
+                assert!(err.error_message.contains("extensions not supported"));
+            }
+            other => panic!("expected ErrorResponse for extensions, got {other:?}"),
+        }
+    }
+
+    // R5: Unknown path in Service::call — returns Unimplemented
+    #[tokio::test]
+    async fn unknown_path_returns_unimplemented() {
+        let mut server = ReflectionServer::builder().build();
+
+        let req = http::Request::builder()
+            .uri("/grpc.reflection.v1.ServerReflection/UnknownMethod")
+            .body(Body::empty())
+            .unwrap();
+
+        let resp = tower_service::Service::call(&mut server, req)
+            .await
+            .unwrap();
+        let status = resp.headers().get("grpc-status").unwrap();
+        assert_eq!(status, "12"); // Code::Unimplemented
+    }
 }

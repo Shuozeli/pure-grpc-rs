@@ -223,6 +223,30 @@ mod tests {
         assert!(err.contains("out of bounds"));
     }
 
+    /// G2: service_from_fbs with valid request_index but invalid response_index.
+    #[test]
+    fn service_from_fbs_invalid_response_index_only() {
+        let (schema, mut service) = make_schema_with_service();
+        // request_index=0 is valid, response_index=999 is out of bounds
+        service.calls = vec![ResolvedRpcCall {
+            name: "BadResponse".into(),
+            request_index: 0,
+            response_index: 999,
+            attributes: None,
+            documentation: None,
+            span: None,
+        }];
+        let err = service_from_fbs(&service, &schema, "super").unwrap_err();
+        assert!(
+            err.contains("response_index"),
+            "error should mention response_index, got: {err}"
+        );
+        assert!(
+            err.contains("out of bounds"),
+            "error should mention out of bounds, got: {err}"
+        );
+    }
+
     #[test]
     fn parse_streaming_modes() {
         assert_eq!(parse_streaming(&None), (false, false));

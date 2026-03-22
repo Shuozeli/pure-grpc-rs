@@ -78,118 +78,88 @@ mod prost_bench {
     }
 }
 
-#[cfg(feature = "gzip")]
-mod compression_bench {
-    use super::*;
-    use bytes::BytesMut;
-    use grpc_core::codec::compression::{compress, decompress, CompressionEncoding};
+// Macro for compression benchmarks — same pattern for each encoding
+macro_rules! compression_bench_mod {
+    ($mod_name:ident, $feature:literal, $encoding_variant:ident, $label:literal) => {
+        #[cfg(feature = $feature)]
+        mod $mod_name {
+            use super::*;
+            use bytes::BytesMut;
+            use grpc_core::codec::compression::{compress, decompress, CompressionEncoding};
 
-    pub fn bench_compress(c: &mut Criterion) {
-        let mut group = c.benchmark_group("gzip_compress");
+            pub fn bench_compress(c: &mut Criterion) {
+                let mut group = c.benchmark_group(concat!($label, "_compress"));
+                let data = vec![0xABu8; 65536];
+                group.throughput(Throughput::Bytes(data.len() as u64));
+                group.bench_function("64KB", |b| {
+                    b.iter(|| {
+                        let mut dst = BytesMut::with_capacity(70000);
+                        compress(
+                            CompressionEncoding::$encoding_variant,
+                            black_box(&data),
+                            &mut dst,
+                        )
+                        .unwrap();
+                    });
+                });
+                group.finish();
+            }
 
-        let data = vec![0xABu8; 65536];
-        group.throughput(Throughput::Bytes(data.len() as u64));
-        group.bench_function("64KB", |b| {
-            b.iter(|| {
-                let mut dst = BytesMut::with_capacity(70000);
-                compress(CompressionEncoding::Gzip, black_box(&data), &mut dst).unwrap();
-            });
-        });
+            pub fn bench_decompress(c: &mut Criterion) {
+                let mut group = c.benchmark_group(concat!($label, "_decompress"));
+                let data = vec![0xABu8; 65536];
+                let compressed = {
+                    let mut dst = BytesMut::new();
+                    compress(CompressionEncoding::$encoding_variant, &data, &mut dst).unwrap();
+                    dst.freeze()
+                };
+                group.throughput(Throughput::Bytes(data.len() as u64));
+                group.bench_function("64KB", |b| {
+                    b.iter(|| {
+                        let mut dst = BytesMut::with_capacity(70000);
+                        decompress(
+                            CompressionEncoding::$encoding_variant,
+                            black_box(&compressed),
+                            &mut dst,
+                        )
+                        .unwrap();
+                    });
+                });
+                group.finish();
+            }
+        }
+    };
+}
 
-        group.finish();
+compression_bench_mod!(gzip_bench, "gzip", Gzip, "gzip");
+compression_bench_mod!(deflate_bench, "deflate", Deflate, "deflate");
+compression_bench_mod!(zstd_bench, "zstd", Zstd, "zstd");
+
+// Use a single criterion_group that always includes prost benchmarks.
+// Compression benchmarks are added via wrapper functions that are no-ops
+// when the feature is disabled.
+fn bench_all(c: &mut Criterion) {
+    #[cfg(feature = "prost-codec")]
+    {
+        prost_bench::bench_encode(c);
+        prost_bench::bench_decode(c);
     }
-
-    pub fn bench_decompress(c: &mut Criterion) {
-        let mut group = c.benchmark_group("gzip_decompress");
-
-        let data = vec![0xABu8; 65536];
-        let compressed = {
-            let mut dst = BytesMut::new();
-            compress(CompressionEncoding::Gzip, &data, &mut dst).unwrap();
-            dst.freeze()
-        };
-
-        group.throughput(Throughput::Bytes(data.len() as u64));
-        group.bench_function("64KB", |b| {
-            b.iter(|| {
-                let mut dst = BytesMut::with_capacity(70000);
-                decompress(CompressionEncoding::Gzip, black_box(&compressed), &mut dst).unwrap();
-            });
-        });
-
-        group.finish();
+    #[cfg(feature = "gzip")]
+    {
+        gzip_bench::bench_compress(c);
+        gzip_bench::bench_decompress(c);
+    }
+    #[cfg(feature = "deflate")]
+    {
+        deflate_bench::bench_compress(c);
+        deflate_bench::bench_decompress(c);
+    }
+    #[cfg(feature = "zstd")]
+    {
+        zstd_bench::bench_compress(c);
+        zstd_bench::bench_decompress(c);
     }
 }
 
-#[cfg(feature = "zstd")]
-mod zstd_bench {
-    use super::*;
-    use bytes::BytesMut;
-    use grpc_core::codec::compression::{compress, decompress, CompressionEncoding};
-
-    pub fn bench_compress(c: &mut Criterion) {
-        let mut group = c.benchmark_group("zstd_compress");
-
-        let data = vec![0xABu8; 65536];
-        group.throughput(Throughput::Bytes(data.len() as u64));
-        group.bench_function("64KB", |b| {
-            b.iter(|| {
-                let mut dst = BytesMut::with_capacity(70000);
-                compress(CompressionEncoding::Zstd, black_box(&data), &mut dst).unwrap();
-            });
-        });
-
-        group.finish();
-    }
-
-    pub fn bench_decompress(c: &mut Criterion) {
-        let mut group = c.benchmark_group("zstd_decompress");
-
-        let data = vec![0xABu8; 65536];
-        let compressed = {
-            let mut dst = BytesMut::new();
-            compress(CompressionEncoding::Zstd, &data, &mut dst).unwrap();
-            dst.freeze()
-        };
-
-        group.throughput(Throughput::Bytes(data.len() as u64));
-        group.bench_function("64KB", |b| {
-            b.iter(|| {
-                let mut dst = BytesMut::with_capacity(70000);
-                decompress(CompressionEncoding::Zstd, black_box(&compressed), &mut dst).unwrap();
-            });
-        });
-
-        group.finish();
-    }
-}
-
-// Criterion group/main configuration based on enabled features
-#[cfg(all(feature = "prost-codec", feature = "gzip", feature = "zstd"))]
-criterion_group!(
-    benches,
-    prost_bench::bench_encode,
-    prost_bench::bench_decode,
-    compression_bench::bench_compress,
-    compression_bench::bench_decompress,
-    zstd_bench::bench_compress,
-    zstd_bench::bench_decompress,
-);
-
-#[cfg(all(feature = "prost-codec", feature = "gzip", not(feature = "zstd")))]
-criterion_group!(
-    benches,
-    prost_bench::bench_encode,
-    prost_bench::bench_decode,
-    compression_bench::bench_compress,
-    compression_bench::bench_decompress,
-);
-
-#[cfg(all(feature = "prost-codec", not(feature = "gzip"), not(feature = "zstd")))]
-criterion_group!(
-    benches,
-    prost_bench::bench_encode,
-    prost_bench::bench_decode,
-);
-
+criterion_group!(benches, bench_all);
 criterion_main!(benches);

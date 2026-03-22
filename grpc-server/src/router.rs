@@ -220,4 +220,28 @@ mod tests {
         assert!(router.route("/other.Svc/Method").is_none());
         assert!(router.route("/noservice").is_none());
     }
+
+    // S14: Router::into_layered — apply a tower layer to the router
+    #[tokio::test]
+    async fn into_layered_applies_layer() {
+        let router = Router::new().add_service(
+            "helloworld.Greeter",
+            MockService {
+                name: "greeter".to_string(),
+            },
+        );
+
+        // Apply identity layer — should produce a working service
+        let mut layered = router.into_layered(tower::layer::util::Identity::new());
+
+        let req = Request::builder()
+            .uri("/helloworld.Greeter/SayHello")
+            .body(Body::empty())
+            .unwrap();
+
+        let resp = tower_service::Service::call(&mut layered, req)
+            .await
+            .unwrap();
+        assert_eq!(resp.headers().get("x-service").unwrap(), "greeter");
+    }
 }

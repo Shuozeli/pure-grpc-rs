@@ -419,4 +419,214 @@ mod tests {
         assert_eq!(grpc.max_decoding_message_size, Some(1024));
         assert_eq!(grpc.max_encoding_message_size, Some(2048));
     }
+
+    // --- Mock transport for client Grpc tests ---
+
+    use bytes::{BufMut, BytesMut};
+    use grpc_core::codec::{BufferSettings, DecodeBuf, Decoder, EncodeBuf, Encoder};
+
+    #[derive(Debug, Default, Clone)]
+    struct TestCodec;
+
+    #[derive(Debug, Default)]
+    struct TestEncoder;
+
+    #[derive(Debug, Default)]
+    struct TestDecoder;
+
+    impl grpc_core::codec::Codec for TestCodec {
+        type Encode = Vec<u8>;
+        type Decode = Vec<u8>;
+        type Encoder = TestEncoder;
+        type Decoder = TestDecoder;
+
+        fn encoder(&mut self) -> Self::Encoder {
+            TestEncoder
+        }
+
+        fn decoder(&mut self) -> Self::Decoder {
+            TestDecoder
+        }
+    }
+
+    impl Encoder for TestEncoder {
+        type Item = Vec<u8>;
+        type Error = Status;
+
+        fn encode(&mut self, item: Self::Item, buf: &mut EncodeBuf<'_>) -> Result<(), Self::Error> {
+            buf.put_slice(&item);
+            Ok(())
+        }
+    }
+
+    impl Decoder for TestDecoder {
+        type Item = Vec<u8>;
+        type Error = Status;
+
+        fn decode(&mut self, buf: &mut DecodeBuf<'_>) -> Result<Option<Self::Item>, Self::Error> {
+            use bytes::Buf;
+            let len = buf.remaining();
+            if len == 0 {
+                return Ok(None);
+            }
+            let data = buf.copy_to_bytes(len).to_vec();
+            Ok(Some(data))
+        }
+
+        fn buffer_settings(&self) -> BufferSettings {
+            BufferSettings::default()
+        }
+    }
+
+    /// Build a gRPC-framed response body (for mock transport)
+    fn build_grpc_response_body(payload: &[u8]) -> bytes::Bytes {
+        let mut buf = BytesMut::new();
+        buf.put_u8(0); // no compression
+        buf.put_u32(payload.len() as u32);
+        buf.put_slice(payload);
+        buf.freeze()
+    }
+
+    /// A mock transport that echoes the payload back in a proper gRPC response
+    #[derive(Clone)]
+    struct MockEchoTransport;
+
+    impl tower_service::Service<http::Request<Body>> for MockEchoTransport {
+        type Response = http::Response<Body>;
+        type Error = Box<dyn std::error::Error + Send + Sync>;
+        type Future = std::pin::Pin<
+            Box<dyn std::future::Future<Output = Result<Self::Response, Self::Error>> + Send>,
+        >;
+
+        fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+            Poll::Ready(Ok(()))
+        }
+
+        fn call(&mut self, req: http::Request<Body>) -> Self::Future {
+            Box::pin(async move {
+                // Read the request body to get the payload
+                let body = req.into_body();
+                let collected = http_body_util::BodyExt::collect(body).await.unwrap();
+                let data = collected.to_bytes();
+
+                // Extract the payload from the gRPC frame
+                let payload = if data.len() >= 5 { &data[5..] } else { &[] };
+
+                let response_body = build_grpc_response_body(payload);
+
+                // Build response with trailers indicating OK status
+                let resp = http::Response::builder()
+                    .status(200)
+                    .header("content-type", "application/grpc")
+                    .body(Body::new(http_body_util::Full::new(response_body)))
+                    .unwrap();
+
+                Ok(resp)
+            })
+        }
+    }
+
+    // CL7: Grpc::ready() — verifies the transport poll_ready is called
+    #[tokio::test]
+    async fn grpc_ready_succeeds() {
+        let mut grpc = Grpc::new(MockEchoTransport);
+        // Should succeed because MockEchoTransport always returns Poll::Ready(Ok(()))
+        grpc.ready().await.unwrap();
+    }
+
+    // CL8: Grpc::unary() — core unary RPC pattern
+    #[tokio::test]
+    async fn grpc_unary_roundtrip() {
+        let mut grpc = Grpc::new(MockEchoTransport);
+        let req = Request::new(b"hello".to_vec());
+        let path: PathAndQuery = "/test.Svc/Echo".parse().unwrap();
+
+        let resp = grpc.unary(req, path, TestCodec).await.unwrap();
+        assert_eq!(resp.into_inner(), b"hello");
+    }
+
+    // CL10: Grpc::server_streaming() — server streaming RPC pattern
+    #[tokio::test]
+    async fn grpc_server_streaming() {
+        let mut grpc = Grpc::new(MockEchoTransport);
+        let req = Request::new(b"stream-test".to_vec());
+        let path: PathAndQuery = "/test.Svc/StreamMethod".parse().unwrap();
+
+        let resp = grpc.server_streaming(req, path, TestCodec).await.unwrap();
+        let mut stream = resp.into_inner();
+        let msg = stream.message().await.unwrap().unwrap();
+        assert_eq!(msg, b"stream-test");
+    }
+
+    // CL12: prepare_request path merging — origin + path concatenation
+    #[test]
+    fn prepare_request_root_origin_path() {
+        let grpc = Grpc::with_origin((), "http://localhost:50051/".parse().unwrap());
+        let req = Request::new(Body::empty());
+        let path: PathAndQuery = "/test.Svc/Method".parse().unwrap();
+
+        let http_req = grpc.prepare_request(req, path).unwrap();
+        // Root path "/" should just use the given path
+        assert_eq!(http_req.uri().path(), "/test.Svc/Method");
+    }
+
+    // CL13: create_response — trailers-only error status
+    #[tokio::test]
+    async fn create_response_trailers_only_error() {
+        let grpc = Grpc::new(MockEchoTransport);
+
+        // Build a trailers-only response with error status
+        let resp = http::Response::builder()
+            .status(200)
+            .header("content-type", "application/grpc")
+            .header("grpc-status", "7") // PermissionDenied
+            .header("grpc-message", "denied")
+            .body(Body::new(http_body_util::Full::new(bytes::Bytes::new())))
+            .unwrap();
+
+        let result = grpc.create_response(TestDecoder, resp);
+        assert!(result.is_err());
+        let status = result.unwrap_err();
+        assert_eq!(status.code(), Code::PermissionDenied);
+    }
+
+    // CL13: create_response — trailers-only OK status
+    #[tokio::test]
+    async fn create_response_trailers_only_ok() {
+        let grpc = Grpc::new(MockEchoTransport);
+
+        let resp = http::Response::builder()
+            .status(200)
+            .header("content-type", "application/grpc")
+            .header("grpc-status", "0") // Ok
+            .body(Body::new(http_body_util::Full::new(bytes::Bytes::new())))
+            .unwrap();
+
+        let result = grpc.create_response(TestDecoder, resp);
+        assert!(result.is_ok());
+    }
+
+    // CL13: create_response — normal response (no trailers-only)
+    #[tokio::test]
+    async fn create_response_normal_response() {
+        let grpc = Grpc::new(MockEchoTransport);
+
+        let body = build_grpc_response_body(b"test-data");
+        let resp = http::Response::builder()
+            .status(200)
+            .header("content-type", "application/grpc")
+            .body(Body::new(http_body_util::Full::new(body)))
+            .unwrap();
+
+        let result = grpc.create_response(TestDecoder, resp);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn grpc_debug_impl() {
+        let grpc = Grpc::new(42u32);
+        let debug = format!("{grpc:?}");
+        assert!(debug.contains("Grpc"));
+        assert!(debug.contains("42"));
+    }
 }

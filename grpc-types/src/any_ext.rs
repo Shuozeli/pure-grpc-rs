@@ -309,4 +309,27 @@ mod tests {
             other => panic!("expected Unknown, got {other:?}"),
         }
     }
+
+    // T3: FromAny with corrupted Any.value — should return DecodeError
+    #[test]
+    fn from_any_with_corrupted_value() {
+        // Use ErrorInfo's type_url but with garbage bytes
+        let any = Any {
+            type_url: <ErrorInfo as IntoAny>::TYPE_URL.to_string(),
+            value: vec![0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF],
+        };
+        let result = ErrorInfo::from_any(&any);
+        assert!(result.is_err(), "expected DecodeError for corrupted value");
+    }
+
+    // T3 variant: decode_any with known type_url but corrupted value
+    #[test]
+    fn decode_any_known_type_corrupted_value() {
+        let any = Any {
+            type_url: <RetryInfo as IntoAny>::TYPE_URL.to_string(),
+            value: vec![0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF],
+        };
+        let result = decode_any(&any);
+        assert!(result.is_err(), "expected DecodeError for corrupted value");
+    }
 }
