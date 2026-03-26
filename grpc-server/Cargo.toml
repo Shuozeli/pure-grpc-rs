@@ -32,5 +32,6 @@ tokio-rustls = { version = "0.26", optional = true, default-features = false, fe
 rustls-pemfile = { version = "2", optional = true }
 
 [dev-dependencies]
+grpc-core = { path = "../grpc-core", features = ["test-helpers"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 flate2 = "1"

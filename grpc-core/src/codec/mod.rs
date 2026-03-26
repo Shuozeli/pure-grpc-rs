@@ -6,6 +6,9 @@ mod encode;
 #[cfg(feature = "prost-codec")]
 pub mod prost_codec;
 
+#[cfg(any(test, feature = "test-helpers"))]
+pub mod test_helpers;
+
 use crate::Status;
 use std::io;
 

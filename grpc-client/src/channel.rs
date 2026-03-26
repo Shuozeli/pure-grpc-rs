@@ -1,5 +1,6 @@
-use crate::endpoint::Http2Config;
+use grpc_core::Http2Config;
 use grpc_core::body::Body;
+use grpc_core::BoxError;
 use grpc_core::BoxFuture;
 use http::{Request, Response};
 use hyper_util::client::legacy::Client;
@@ -7,7 +8,6 @@ use hyper_util::rt::TokioExecutor;
 use std::task::{Context, Poll};
 use std::time::Duration;
 use tower_service::Service;
-type BoxError = Box<dyn std::error::Error + Send + Sync + 'static>;
 
 /// A gRPC channel (HTTP/2 client connection).
 ///

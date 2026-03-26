@@ -40,6 +40,27 @@ pub enum ErrorDetail {
     Unknown(Any),
 }
 
+impl ErrorDetail {
+    /// Convert this error detail into a `prost_types::Any`.
+    ///
+    /// Every variant wraps a type that implements `IntoAny`, so this always succeeds.
+    pub fn into_any(self) -> Any {
+        match self {
+            ErrorDetail::ErrorInfo(v) => v.into_any(),
+            ErrorDetail::RetryInfo(v) => v.into_any(),
+            ErrorDetail::DebugInfo(v) => v.into_any(),
+            ErrorDetail::QuotaFailure(v) => v.into_any(),
+            ErrorDetail::PreconditionFailure(v) => v.into_any(),
+            ErrorDetail::BadRequest(v) => v.into_any(),
+            ErrorDetail::RequestInfo(v) => v.into_any(),
+            ErrorDetail::ResourceInfo(v) => v.into_any(),
+            ErrorDetail::Help(v) => v.into_any(),
+            ErrorDetail::LocalizedMessage(v) => v.into_any(),
+            ErrorDetail::Unknown(any) => any,
+        }
+    }
+}
+
 /// Decode an `Any` into a known `ErrorDetail` variant, or `Unknown` if the type URL
 /// is not recognized.
 pub fn decode_any(any: &Any) -> Result<ErrorDetail, DecodeError> {

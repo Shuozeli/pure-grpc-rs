@@ -12,6 +12,7 @@ prost-codec = ["prost"]
 gzip = ["flate2"]
 deflate = ["flate2"]
 zstd = ["dep:zstd"]
+test-helpers = []
 
 [dependencies]
 bytes = "1"

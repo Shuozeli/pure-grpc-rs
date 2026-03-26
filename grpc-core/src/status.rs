@@ -234,7 +234,7 @@ impl Status {
         };
 
         let details = match header_map.get(Self::GRPC_STATUS_DETAILS) {
-            Some(header) => match base64_engine().decode(header.as_bytes()) {
+            Some(header) => match BASE64_ENGINE.decode(header.as_bytes()) {
                 Ok(bytes) => bytes.into(),
                 Err(_) => {
                     // Corrupted status details — log context in the message
@@ -296,7 +296,7 @@ impl Status {
         }
 
         if !self.0.details.is_empty() {
-            let encoded = base64_no_pad_engine().encode(&self.0.details[..]);
+            let encoded = BASE64_NO_PAD_ENGINE.encode(&self.0.details[..]);
             header_map.insert(
                 Self::GRPC_STATUS_DETAILS,
                 HeaderValue::from_maybe_shared(encoded)
@@ -455,7 +455,9 @@ pub(crate) fn infer_grpc_status(
 
 // --- Base64 engines ---
 
-fn base64_engine() -> base64::engine::GeneralPurpose {
+use std::sync::LazyLock;
+
+static BASE64_ENGINE: LazyLock<base64::engine::GeneralPurpose> = LazyLock::new(|| {
     use base64::{alphabet, engine::general_purpose::GeneralPurposeConfig};
     base64::engine::GeneralPurpose::new(
         &alphabet::STANDARD,
@@ -463,9 +465,9 @@ fn base64_engine() -> base64::engine::GeneralPurpose {
             .with_encode_padding(true)
             .with_decode_padding_mode(base64::engine::DecodePaddingMode::Indifferent),
     )
-}
+});
 
-fn base64_no_pad_engine() -> base64::engine::GeneralPurpose {
+static BASE64_NO_PAD_ENGINE: LazyLock<base64::engine::GeneralPurpose> = LazyLock::new(|| {
     use base64::{alphabet, engine::general_purpose::GeneralPurposeConfig};
     base64::engine::GeneralPurpose::new(
         &alphabet::STANDARD,
@@ -473,7 +475,7 @@ fn base64_no_pad_engine() -> base64::engine::GeneralPurpose {
             .with_encode_padding(false)
             .with_decode_padding_mode(base64::engine::DecodePaddingMode::Indifferent),
     )
-}
+});
 
 #[cfg(test)]
 mod tests {

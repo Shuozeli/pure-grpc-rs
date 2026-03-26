@@ -15,6 +15,7 @@
 pub mod body;
 pub mod codec;
 pub mod extensions;
+pub mod http2_config;
 pub mod metadata;
 pub mod request;
 pub mod response;
@@ -26,6 +27,7 @@ pub use extensions::GrpcMethod;
 pub use metadata::MetadataMap;
 pub use request::Request;
 pub use response::Response;
+pub use http2_config::Http2Config;
 pub use status::{Code, Status};
 
 /// A type alias for `Box<dyn std::error::Error + Send + Sync + 'static>`.

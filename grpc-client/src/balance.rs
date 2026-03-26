@@ -1,16 +1,15 @@
 //! Round-robin load balancing across multiple gRPC channels.
 
-use crate::endpoint::Http2Config;
+use grpc_core::Http2Config;
 use crate::Channel;
 use grpc_core::body::Body;
+use grpc_core::BoxError;
 use grpc_core::BoxFuture;
 use http::{Request, Response, Uri};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::task::{Context, Poll};
 use tower_service::Service;
-
-type BoxError = Box<dyn std::error::Error + Send + Sync + 'static>;
 
 /// A load-balanced channel that distributes requests across multiple endpoints
 /// using round-robin selection.
@@ -29,19 +28,21 @@ impl BalancedChannel {
     /// Establishes a `Channel` for each URI. All channels share the same
     /// HTTP/2 configuration defaults.
     ///
-    /// # Panics
-    ///
-    /// Panics if `endpoints` is empty.
+    /// Returns an error if `endpoints` is empty.
     pub async fn from_uris(endpoints: Vec<Uri>) -> Result<Self, BoxError> {
         Self::from_uris_with_h2_config(endpoints, Http2Config::default()).await
     }
 
     /// Create a balanced channel with custom HTTP/2 settings.
+    ///
+    /// Returns an error if `endpoints` is empty.
     pub(crate) async fn from_uris_with_h2_config(
         endpoints: Vec<Uri>,
         config: Http2Config,
     ) -> Result<Self, BoxError> {
-        assert!(!endpoints.is_empty(), "at least one endpoint is required");
+        if endpoints.is_empty() {
+            return Err("at least one endpoint is required".into());
+        }
         let mut channels = Vec::with_capacity(endpoints.len());
         for uri in endpoints {
             channels.push(Channel::connect_with_h2_config(uri, config.clone()).await?);
@@ -104,9 +105,10 @@ mod tests {
     }
 
     #[tokio::test]
-    #[should_panic(expected = "at least one endpoint is required")]
-    async fn balanced_channel_empty_panics() {
-        let _ = BalancedChannel::from_uris(vec![]).await;
+    async fn balanced_channel_empty_returns_error() {
+        let result = BalancedChannel::from_uris(vec![]).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("at least one endpoint is required"));
     }
 
     #[test]

@@ -1,4 +1,5 @@
 use grpc_core::body::Body;
+use grpc_core::Http2Config;
 use http::{Request, Response};
 use hyper_util::rt::{TokioExecutor, TokioIo};
 use hyper_util::server::conn::auto::Builder as ConnectionBuilder;
@@ -11,7 +12,7 @@ use std::time::Duration;
 use tokio::net::TcpListener;
 use tokio::sync::Semaphore;
 use tower_service::Service;
-use tracing::{debug, info, trace};
+use tracing::{debug, info, trace, warn};
 
 /// A gRPC server that listens on a TCP socket and serves HTTP/2 requests.
 ///
@@ -23,21 +24,18 @@ pub struct Server {
     tcp_nodelay: bool,
     timeout: Option<Duration>,
     concurrency_limit: usize,
-    http2: Http2Config,
+    http2: ServerHttp2Config,
     #[cfg(feature = "tls")]
     tls_config: Option<TlsConfig>,
 }
 
-/// HTTP/2 connection-level settings.
+/// Server-side HTTP/2 settings: shared config plus server-only fields.
 #[derive(Clone, Default)]
-struct Http2Config {
-    initial_stream_window_size: Option<u32>,
-    initial_connection_window_size: Option<u32>,
-    adaptive_window: Option<bool>,
-    max_frame_size: Option<u32>,
+struct ServerHttp2Config {
+    /// Shared HTTP/2 settings (stream window, connection window, frame size, keep-alive, etc.).
+    shared: Http2Config,
+    /// Maximum concurrent streams per connection (server-only).
     max_concurrent_streams: Option<u32>,
-    keep_alive_interval: Option<Duration>,
-    keep_alive_timeout: Option<Duration>,
 }
 
 #[cfg(feature = "tls")]
@@ -52,7 +50,7 @@ impl Server {
             tcp_nodelay: true,
             timeout: None,
             concurrency_limit: DEFAULT_CONCURRENCY_LIMIT,
-            http2: Http2Config::default(),
+            http2: ServerHttp2Config::default(),
             #[cfg(feature = "tls")]
             tls_config: None,
         }
@@ -84,7 +82,7 @@ impl Server {
     /// Larger values reduce stalls for large messages but consume more memory per stream.
     /// Default: 65,535 bytes (h2 spec default).
     pub fn initial_stream_window_size(mut self, size: u32) -> Self {
-        self.http2.initial_stream_window_size = Some(size);
+        self.http2.shared.initial_stream_window_size = Some(size);
         self
     }
 
@@ -93,7 +91,7 @@ impl Server {
     /// Controls the aggregate flow across all streams on a connection.
     /// Default: 65,535 bytes (h2 spec default).
     pub fn initial_connection_window_size(mut self, size: u32) -> Self {
-        self.http2.initial_connection_window_size = Some(size);
+        self.http2.shared.initial_connection_window_size = Some(size);
         self
     }
 
@@ -102,7 +100,7 @@ impl Server {
     /// When enabled, the connection dynamically adjusts window sizes based on
     /// observed bandwidth-delay product. Recommended for high-throughput streaming.
     pub fn http2_adaptive_window(mut self, enabled: bool) -> Self {
-        self.http2.adaptive_window = Some(enabled);
+        self.http2.shared.adaptive_window = Some(enabled);
         self
     }
 
@@ -111,7 +109,7 @@ impl Server {
     /// Must be between 16,384 and 16,777,215 (h2 spec bounds).
     /// Default: 16,384 bytes.
     pub fn max_frame_size(mut self, size: u32) -> Self {
-        self.http2.max_frame_size = Some(size);
+        self.http2.shared.max_frame_size = Some(size);
         self
     }
 
@@ -127,7 +125,7 @@ impl Server {
     ///
     /// Sends PING frames at this interval to detect dead connections.
     pub fn http2_keep_alive_interval(mut self, interval: Duration) -> Self {
-        self.http2.keep_alive_interval = Some(interval);
+        self.http2.shared.keep_alive_interval = Some(interval);
         self
     }
 
@@ -135,7 +133,7 @@ impl Server {
     ///
     /// If a PING response is not received within this duration, the connection is closed.
     pub fn http2_keep_alive_timeout(mut self, timeout: Duration) -> Self {
-        self.http2.keep_alive_timeout = Some(timeout);
+        self.http2.shared.keep_alive_timeout = Some(timeout);
         self
     }
 
@@ -256,8 +254,13 @@ impl Server {
                         Ok(permit) => permit,
                         Err(_) => {
                             debug!("concurrency limit reached, waiting for a slot");
-                            sem.clone().acquire_owned().await
-                                .expect("semaphore should not be closed")
+                            match sem.clone().acquire_owned().await {
+                                Ok(permit) => permit,
+                                Err(_) => {
+                                    warn!("semaphore closed, stopping accept loop");
+                                    break;
+                                }
+                            }
                         }
                     };
 
@@ -303,7 +306,7 @@ async fn serve_connection<I, S>(
     io: I,
     svc: S,
     timeout: Option<Duration>,
-    http2: &Http2Config,
+    http2: &ServerHttp2Config,
     remote_addr: SocketAddr,
 ) where
     I: hyper::rt::Read + hyper::rt::Write + Unpin + Send + 'static,
@@ -322,25 +325,25 @@ async fn serve_connection<I, S>(
     // Apply HTTP/2 settings
     {
         let mut h2 = builder.http2();
-        if let Some(sz) = http2.initial_stream_window_size {
+        if let Some(sz) = http2.shared.initial_stream_window_size {
             h2.initial_stream_window_size(sz);
         }
-        if let Some(sz) = http2.initial_connection_window_size {
+        if let Some(sz) = http2.shared.initial_connection_window_size {
             h2.initial_connection_window_size(sz);
         }
-        if let Some(enabled) = http2.adaptive_window {
+        if let Some(enabled) = http2.shared.adaptive_window {
             h2.adaptive_window(enabled);
         }
-        if let Some(sz) = http2.max_frame_size {
+        if let Some(sz) = http2.shared.max_frame_size {
             h2.max_frame_size(sz);
         }
         if let Some(max) = http2.max_concurrent_streams {
             h2.max_concurrent_streams(max);
         }
-        if let Some(interval) = http2.keep_alive_interval {
+        if let Some(interval) = http2.shared.keep_alive_interval {
             h2.keep_alive_interval(interval);
         }
-        if let Some(timeout) = http2.keep_alive_timeout {
+        if let Some(timeout) = http2.shared.keep_alive_timeout {
             h2.keep_alive_timeout(timeout);
         }
     }
@@ -400,7 +403,7 @@ mod tests {
         assert!(server.tcp_nodelay);
         assert!(server.timeout.is_none());
         assert_eq!(server.concurrency_limit, DEFAULT_CONCURRENCY_LIMIT);
-        assert!(server.http2.initial_stream_window_size.is_none());
+        assert!(server.http2.shared.initial_stream_window_size.is_none());
         assert!(server.http2.max_concurrent_streams.is_none());
     }
 
@@ -423,20 +426,20 @@ mod tests {
             .max_concurrent_streams(100)
             .http2_keep_alive_interval(Duration::from_secs(10))
             .http2_keep_alive_timeout(Duration::from_secs(20));
-        assert_eq!(server.http2.initial_stream_window_size, Some(1024 * 1024));
+        assert_eq!(server.http2.shared.initial_stream_window_size, Some(1024 * 1024));
         assert_eq!(
-            server.http2.initial_connection_window_size,
+            server.http2.shared.initial_connection_window_size,
             Some(2 * 1024 * 1024)
         );
-        assert_eq!(server.http2.adaptive_window, Some(true));
-        assert_eq!(server.http2.max_frame_size, Some(32768));
+        assert_eq!(server.http2.shared.adaptive_window, Some(true));
+        assert_eq!(server.http2.shared.max_frame_size, Some(32768));
         assert_eq!(server.http2.max_concurrent_streams, Some(100));
         assert_eq!(
-            server.http2.keep_alive_interval,
+            server.http2.shared.keep_alive_interval,
             Some(Duration::from_secs(10))
         );
         assert_eq!(
-            server.http2.keep_alive_timeout,
+            server.http2.shared.keep_alive_timeout,
             Some(Duration::from_secs(20))
         );
     }

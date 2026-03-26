@@ -423,60 +423,7 @@ mod tests {
     // --- Mock transport for client Grpc tests ---
 
     use bytes::{BufMut, BytesMut};
-    use grpc_core::codec::{BufferSettings, DecodeBuf, Decoder, EncodeBuf, Encoder};
-
-    #[derive(Debug, Default, Clone)]
-    struct TestCodec;
-
-    #[derive(Debug, Default)]
-    struct TestEncoder;
-
-    #[derive(Debug, Default)]
-    struct TestDecoder;
-
-    impl grpc_core::codec::Codec for TestCodec {
-        type Encode = Vec<u8>;
-        type Decode = Vec<u8>;
-        type Encoder = TestEncoder;
-        type Decoder = TestDecoder;
-
-        fn encoder(&mut self) -> Self::Encoder {
-            TestEncoder
-        }
-
-        fn decoder(&mut self) -> Self::Decoder {
-            TestDecoder
-        }
-    }
-
-    impl Encoder for TestEncoder {
-        type Item = Vec<u8>;
-        type Error = Status;
-
-        fn encode(&mut self, item: Self::Item, buf: &mut EncodeBuf<'_>) -> Result<(), Self::Error> {
-            buf.put_slice(&item);
-            Ok(())
-        }
-    }
-
-    impl Decoder for TestDecoder {
-        type Item = Vec<u8>;
-        type Error = Status;
-
-        fn decode(&mut self, buf: &mut DecodeBuf<'_>) -> Result<Option<Self::Item>, Self::Error> {
-            use bytes::Buf;
-            let len = buf.remaining();
-            if len == 0 {
-                return Ok(None);
-            }
-            let data = buf.copy_to_bytes(len).to_vec();
-            Ok(Some(data))
-        }
-
-        fn buffer_settings(&self) -> BufferSettings {
-            BufferSettings::default()
-        }
-    }
+    use grpc_core::codec::test_helpers::{TestCodec, TestDecoder};
 
     /// Build a gRPC-framed response body (for mock transport)
     fn build_grpc_response_body(payload: &[u8]) -> bytes::Bytes {

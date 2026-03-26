@@ -1,8 +1,8 @@
 use crate::Channel;
+use grpc_core::BoxError;
+use grpc_core::Http2Config;
 use http::Uri;
 use std::time::Duration;
-
-type BoxError = Box<dyn std::error::Error + Send + Sync + 'static>;
 
 /// A builder for configuring and connecting a gRPC [`Channel`].
 #[derive(Debug, Clone)]
@@ -13,17 +13,6 @@ pub struct Endpoint {
     http2: Http2Config,
     #[cfg(feature = "tls")]
     tls: TlsMode,
-}
-
-/// HTTP/2 connection-level settings for the client.
-#[derive(Debug, Clone, Default)]
-pub(crate) struct Http2Config {
-    pub initial_stream_window_size: Option<u32>,
-    pub initial_connection_window_size: Option<u32>,
-    pub adaptive_window: Option<bool>,
-    pub max_frame_size: Option<u32>,
-    pub keep_alive_interval: Option<Duration>,
-    pub keep_alive_timeout: Option<Duration>,
 }
 
 #[cfg(feature = "tls")]

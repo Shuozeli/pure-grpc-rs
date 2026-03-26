@@ -298,20 +298,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // Simple test encoder that writes raw bytes
-    #[derive(Debug, Default)]
-    struct TestEncoder;
-
-    impl Encoder for TestEncoder {
-        type Item = Vec<u8>;
-        type Error = Status;
-
-        fn encode(&mut self, item: Self::Item, buf: &mut EncodeBuf<'_>) -> Result<(), Self::Error> {
-            buf.put_slice(&item);
-            Ok(())
-        }
-    }
+    use super::super::test_helpers::TestEncoder;
 
     #[test]
     fn encode_item_produces_valid_frame() {

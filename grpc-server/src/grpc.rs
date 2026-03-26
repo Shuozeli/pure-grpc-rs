@@ -280,59 +280,8 @@ impl<T: fmt::Debug> fmt::Debug for Grpc<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bytes::{Buf, BufMut, BytesMut};
-    use grpc_core::codec::{BufferSettings, DecodeBuf, Decoder, EncodeBuf, Encoder};
-
-    // --- Test codec that encodes/decodes Vec<u8> ---
-
-    #[derive(Debug, Default)]
-    struct TestCodec;
-
-    #[derive(Debug, Default)]
-    struct TestEncoder;
-
-    #[derive(Debug, Default)]
-    struct TestDecoder;
-
-    impl Codec for TestCodec {
-        type Encode = Vec<u8>;
-        type Decode = Vec<u8>;
-        type Encoder = TestEncoder;
-        type Decoder = TestDecoder;
-
-        fn encoder(&mut self) -> Self::Encoder {
-            TestEncoder
-        }
-
-        fn decoder(&mut self) -> Self::Decoder {
-            TestDecoder
-        }
-    }
-
-    impl Encoder for TestEncoder {
-        type Item = Vec<u8>;
-        type Error = Status;
-
-        fn encode(&mut self, item: Self::Item, buf: &mut EncodeBuf<'_>) -> Result<(), Self::Error> {
-            buf.put_slice(&item);
-            Ok(())
-        }
-    }
-
-    impl Decoder for TestDecoder {
-        type Item = Vec<u8>;
-        type Error = Status;
-
-        fn decode(&mut self, buf: &mut DecodeBuf<'_>) -> Result<Option<Self::Item>, Self::Error> {
-            let len = buf.remaining();
-            let data = buf.copy_to_bytes(len).to_vec();
-            Ok(Some(data))
-        }
-
-        fn buffer_settings(&self) -> BufferSettings {
-            BufferSettings::default()
-        }
-    }
+    use bytes::{BufMut, BytesMut};
+    use grpc_core::codec::test_helpers::TestCodec;
 
     // --- Test service ---
 

@@ -172,6 +172,16 @@ mod sealed {
 }
 
 fn duration_to_grpc_timeout(duration: Duration) -> String {
+    // gRPC timeout max is 99_999_999 hours. Clamp to that to avoid panicking
+    // on unrealistically large durations (e.g., Duration::MAX).
+    const MAX_GRPC_TIMEOUT_HOURS: u64 = 99_999_999;
+    let max_duration = Duration::from_secs(MAX_GRPC_TIMEOUT_HOURS * 3600);
+    let duration = if duration > max_duration {
+        max_duration
+    } else {
+        duration
+    };
+
     fn try_format<V: Into<u128>>(
         duration: Duration,
         unit: char,
@@ -186,6 +196,7 @@ fn duration_to_grpc_timeout(duration: Duration) -> String {
         }
     }
 
+    // After clamping, at least the hours format will always succeed.
     try_format(duration, 'n', |d| d.as_nanos())
         .or_else(|| try_format(duration, 'u', |d| d.as_micros()))
         .or_else(|| try_format(duration, 'm', |d| d.as_millis()))
@@ -197,7 +208,7 @@ fn duration_to_grpc_timeout(duration: Duration) -> String {
                 minutes / 60
             })
         })
-        .expect("duration is unrealistically large")
+        .expect("clamped duration always fits in hours format")
 }
 
 #[cfg(test)]

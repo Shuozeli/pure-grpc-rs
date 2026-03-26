@@ -4,7 +4,7 @@ use bytes::Bytes;
 use grpc_core::status::{Code, Status};
 use prost::{DecodeError, Message};
 
-use crate::any_ext::{decode_any, ErrorDetail, IntoAny};
+use crate::any_ext::{decode_any, ErrorDetail};
 use crate::google::rpc::*;
 
 /// Extension trait for `grpc_core::Status` providing rich error detail support.
@@ -50,6 +50,21 @@ pub trait StatusExt {
     fn get_details_localized_message(&self) -> Option<LocalizedMessage>;
 }
 
+/// Generates a `get_details_*` method that extracts the first matching `ErrorDetail` variant.
+macro_rules! impl_get_details {
+    ($fn_name:ident, $variant:ident, $type:ty) => {
+        fn $fn_name(&self) -> Option<$type> {
+            self.error_details()
+                .ok()?
+                .into_iter()
+                .find_map(|d| match d {
+                    ErrorDetail::$variant(v) => Some(v),
+                    _ => None,
+                })
+        }
+    };
+}
+
 impl StatusExt for Status {
     fn with_error_details(
         code: Code,
@@ -57,22 +72,8 @@ impl StatusExt for Status {
         details: Vec<ErrorDetail>,
     ) -> Status {
         let message = message.into();
-        let any_details: Vec<prost_types::Any> = details
-            .into_iter()
-            .map(|d| match d {
-                ErrorDetail::ErrorInfo(v) => v.into_any(),
-                ErrorDetail::RetryInfo(v) => v.into_any(),
-                ErrorDetail::DebugInfo(v) => v.into_any(),
-                ErrorDetail::QuotaFailure(v) => v.into_any(),
-                ErrorDetail::PreconditionFailure(v) => v.into_any(),
-                ErrorDetail::BadRequest(v) => v.into_any(),
-                ErrorDetail::RequestInfo(v) => v.into_any(),
-                ErrorDetail::ResourceInfo(v) => v.into_any(),
-                ErrorDetail::Help(v) => v.into_any(),
-                ErrorDetail::LocalizedMessage(v) => v.into_any(),
-                ErrorDetail::Unknown(any) => any,
-            })
-            .collect();
+        let any_details: Vec<prost_types::Any> =
+            details.into_iter().map(|d| d.into_any()).collect();
 
         let rpc_status = crate::google::rpc::Status {
             code: code as i32,
@@ -94,105 +95,16 @@ impl StatusExt for Status {
         rpc_status.details.iter().map(decode_any).collect()
     }
 
-    fn get_details_error_info(&self) -> Option<ErrorInfo> {
-        self.error_details()
-            .ok()?
-            .into_iter()
-            .find_map(|d| match d {
-                ErrorDetail::ErrorInfo(v) => Some(v),
-                _ => None,
-            })
-    }
-
-    fn get_details_retry_info(&self) -> Option<RetryInfo> {
-        self.error_details()
-            .ok()?
-            .into_iter()
-            .find_map(|d| match d {
-                ErrorDetail::RetryInfo(v) => Some(v),
-                _ => None,
-            })
-    }
-
-    fn get_details_debug_info(&self) -> Option<DebugInfo> {
-        self.error_details()
-            .ok()?
-            .into_iter()
-            .find_map(|d| match d {
-                ErrorDetail::DebugInfo(v) => Some(v),
-                _ => None,
-            })
-    }
-
-    fn get_details_quota_failure(&self) -> Option<QuotaFailure> {
-        self.error_details()
-            .ok()?
-            .into_iter()
-            .find_map(|d| match d {
-                ErrorDetail::QuotaFailure(v) => Some(v),
-                _ => None,
-            })
-    }
-
-    fn get_details_precondition_failure(&self) -> Option<PreconditionFailure> {
-        self.error_details()
-            .ok()?
-            .into_iter()
-            .find_map(|d| match d {
-                ErrorDetail::PreconditionFailure(v) => Some(v),
-                _ => None,
-            })
-    }
-
-    fn get_details_bad_request(&self) -> Option<BadRequest> {
-        self.error_details()
-            .ok()?
-            .into_iter()
-            .find_map(|d| match d {
-                ErrorDetail::BadRequest(v) => Some(v),
-                _ => None,
-            })
-    }
-
-    fn get_details_request_info(&self) -> Option<RequestInfo> {
-        self.error_details()
-            .ok()?
-            .into_iter()
-            .find_map(|d| match d {
-                ErrorDetail::RequestInfo(v) => Some(v),
-                _ => None,
-            })
-    }
-
-    fn get_details_resource_info(&self) -> Option<ResourceInfo> {
-        self.error_details()
-            .ok()?
-            .into_iter()
-            .find_map(|d| match d {
-                ErrorDetail::ResourceInfo(v) => Some(v),
-                _ => None,
-            })
-    }
-
-    fn get_details_help(&self) -> Option<Help> {
-        self.error_details()
-            .ok()?
-            .into_iter()
-            .find_map(|d| match d {
-                ErrorDetail::Help(v) => Some(v),
-                _ => None,
-            })
-    }
-
-    fn get_details_localized_message(&self) -> Option<LocalizedMessage> {
-        self.error_details()
-            .ok()?
-            .into_iter()
-            .find_map(|d| match d {
-                ErrorDetail::LocalizedMessage(v) => Some(v),
-                _ => None,
-            })
-    }
+    impl_get_details!(get_details_error_info, ErrorInfo, ErrorInfo);
+    impl_get_details!(get_details_retry_info, RetryInfo, RetryInfo);
+    impl_get_details!(get_details_debug_info, DebugInfo, DebugInfo);
+    impl_get_details!(get_details_quota_failure, QuotaFailure, QuotaFailure);
+    impl_get_details!(get_details_precondition_failure, PreconditionFailure, PreconditionFailure);
+    impl_get_details!(get_details_bad_request, BadRequest, BadRequest);
+    impl_get_details!(get_details_request_info, RequestInfo, RequestInfo);
+    impl_get_details!(get_details_resource_info, ResourceInfo, ResourceInfo);
+    impl_get_details!(get_details_help, Help, Help);
+    impl_get_details!(get_details_localized_message, LocalizedMessage, LocalizedMessage);
 }
 
 #[cfg(test)]

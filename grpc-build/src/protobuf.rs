@@ -40,7 +40,8 @@ pub fn compile_protos(
 
     for proto_path in protos {
         let proto_path = proto_path.as_ref();
-        let _source = std::fs::read_to_string(proto_path).map_err(|e| {
+        // Verify the proto file exists and is accessible before passing to the analyzer.
+        std::fs::metadata(proto_path).map_err(|e| {
             io::Error::new(
                 io::ErrorKind::NotFound,
                 format!("failed to read {}: {e}", proto_path.display()),

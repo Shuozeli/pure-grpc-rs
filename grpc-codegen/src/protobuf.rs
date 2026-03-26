@@ -11,14 +11,13 @@ const DEFAULT_CODEC_PATH: &str = "grpc_core::codec::prost_codec::ProstCodec";
 ///
 /// `package` is the proto package name (e.g., `"helloworld"`).
 /// `proto_path` is the Rust module prefix for types (e.g., `"super"` or `"crate"`).
-/// Convert a protobuf-rs `ServiceDescriptorProto` into a `ServiceDef`.
 ///
 /// Returns an error if the service or any of its methods are missing required fields.
 ///
 /// Note: `comments` are not populated because proto descriptors carry documentation
 /// in `SourceCodeInfo` (on `FileDescriptorProto`), not on individual descriptors.
 /// Wiring up source comments requires passing the file-level `SourceCodeInfo` and
-/// computing source paths — left for a future codegen enhancement.
+/// computing source paths -- left for a future codegen enhancement.
 pub fn service_from_proto(
     proto: &ServiceDescriptorProto,
     package: &str,

@@ -34,4 +34,5 @@ rustls-native-certs = { version = "0.8", optional = true }
 hyper-rustls = { version = "0.27", optional = true, default-features = false, features = ["ring", "http2", "native-tokio"] }
 
 [dev-dependencies]
+grpc-core = { path = "../grpc-core", features = ["test-helpers"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

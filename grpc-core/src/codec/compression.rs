@@ -59,7 +59,9 @@ impl CompressionEncoding {
             return Ok(None);
         };
 
-        let encoding_str = val.to_str().unwrap_or("");
+        let encoding_str = val
+            .to_str()
+            .map_err(|_| crate::Status::internal("grpc-encoding header is not valid UTF-8"))?;
 
         if encoding_str == "identity" {
             return Ok(None);
