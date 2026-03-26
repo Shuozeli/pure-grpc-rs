@@ -99,12 +99,20 @@ impl StatusExt for Status {
     impl_get_details!(get_details_retry_info, RetryInfo, RetryInfo);
     impl_get_details!(get_details_debug_info, DebugInfo, DebugInfo);
     impl_get_details!(get_details_quota_failure, QuotaFailure, QuotaFailure);
-    impl_get_details!(get_details_precondition_failure, PreconditionFailure, PreconditionFailure);
+    impl_get_details!(
+        get_details_precondition_failure,
+        PreconditionFailure,
+        PreconditionFailure
+    );
     impl_get_details!(get_details_bad_request, BadRequest, BadRequest);
     impl_get_details!(get_details_request_info, RequestInfo, RequestInfo);
     impl_get_details!(get_details_resource_info, ResourceInfo, ResourceInfo);
     impl_get_details!(get_details_help, Help, Help);
-    impl_get_details!(get_details_localized_message, LocalizedMessage, LocalizedMessage);
+    impl_get_details!(
+        get_details_localized_message,
+        LocalizedMessage,
+        LocalizedMessage
+    );
 }
 
 #[cfg(test)]

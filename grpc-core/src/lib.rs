@@ -24,10 +24,10 @@ pub mod status;
 pub use body::Body;
 pub use codec::Streaming;
 pub use extensions::GrpcMethod;
+pub use http2_config::Http2Config;
 pub use metadata::MetadataMap;
 pub use request::Request;
 pub use response::Response;
-pub use http2_config::Http2Config;
 pub use status::{Code, Status};
 
 /// A type alias for `Box<dyn std::error::Error + Send + Sync + 'static>`.

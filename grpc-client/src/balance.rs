@@ -1,10 +1,10 @@
 //! Round-robin load balancing across multiple gRPC channels.
 
-use grpc_core::Http2Config;
 use crate::Channel;
 use grpc_core::body::Body;
 use grpc_core::BoxError;
 use grpc_core::BoxFuture;
+use grpc_core::Http2Config;
 use http::{Request, Response, Uri};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -108,7 +108,10 @@ mod tests {
     async fn balanced_channel_empty_returns_error() {
         let result = BalancedChannel::from_uris(vec![]).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("at least one endpoint is required"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("at least one endpoint is required"));
     }
 
     #[test]

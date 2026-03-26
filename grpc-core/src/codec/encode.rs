@@ -297,8 +297,8 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::test_helpers::TestEncoder;
+    use super::*;
 
     #[test]
     fn encode_item_produces_valid_frame() {

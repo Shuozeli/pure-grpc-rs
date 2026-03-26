@@ -426,7 +426,10 @@ mod tests {
             .max_concurrent_streams(100)
             .http2_keep_alive_interval(Duration::from_secs(10))
             .http2_keep_alive_timeout(Duration::from_secs(20));
-        assert_eq!(server.http2.shared.initial_stream_window_size, Some(1024 * 1024));
+        assert_eq!(
+            server.http2.shared.initial_stream_window_size,
+            Some(1024 * 1024)
+        );
         assert_eq!(
             server.http2.shared.initial_connection_window_size,
             Some(2 * 1024 * 1024)

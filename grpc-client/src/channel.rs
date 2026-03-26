@@ -1,7 +1,7 @@
-use grpc_core::Http2Config;
 use grpc_core::body::Body;
 use grpc_core::BoxError;
 use grpc_core::BoxFuture;
+use grpc_core::Http2Config;
 use http::{Request, Response};
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;
