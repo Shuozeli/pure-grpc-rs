@@ -8,12 +8,14 @@ no tonic dependency. Tonic is in `vendor/tonic/` as reference only.
 Workspace crates:
 - `grpc-core` — Status, Metadata, Codec traits, framing, Body
 - `grpc-server` — Server handler, router, hyper serve loop
-- `grpc-client` — Client dispatcher, Channel, Endpoint
+- `grpc-client` — Client dispatcher, Channel, Endpoint, BalancedChannel
 - `grpc-codegen` — Code generation from service definitions (IR + protobuf/flatbuffers adapters)
 - `grpc-build` — build.rs entry point (`compile_protos`, `compile_fbs`)
 - `grpc-codec-flatbuffers` — FlatBuffers codec + `FlatBufferGrpcMessage` trait
 - `grpc-health` — gRPC Health Checking service (Check + Watch RPCs)
 - `grpc-reflection` — gRPC Server Reflection service (v1)
+- `grpc-types` — Rich error model (google.rpc.* detail types, StatusExt)
+- `grpc-web` — gRPC-Web protocol translation layer
 
 ## Git Rules
 

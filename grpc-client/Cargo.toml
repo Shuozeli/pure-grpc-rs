@@ -8,7 +8,8 @@ license = "MIT"
 
 [features]
 default = []
-tls = ["rustls", "tokio-rustls", "rustls-pemfile", "rustls-native-certs", "hyper-rustls"]
+tls = ["dep:rustls", "dep:tokio-rustls", "dep:rustls-pemfile", "dep:rustls-native-certs", "dep:hyper-rustls"]
+h3 = ["dep:h3", "dep:h3-quinn", "dep:quinn", "dep:rustls", "dep:rustls-pemfile", "dep:rustls-native-certs"]
 gzip = ["grpc-core/gzip"]
 deflate = ["grpc-core/deflate"]
 zstd = ["grpc-core/zstd"]
@@ -32,6 +33,10 @@ tokio-rustls = { version = "0.26", optional = true, default-features = false, fe
 rustls-pemfile = { version = "2", optional = true }
 rustls-native-certs = { version = "0.8", optional = true }
 hyper-rustls = { version = "0.27", optional = true, default-features = false, features = ["ring", "http2", "native-tokio"] }
+
+h3 = { version = "0.0.8", optional = true }
+h3-quinn = { version = "0.0.10", optional = true }
+quinn = { version = "0.11", optional = true, default-features = false, features = ["runtime-tokio", "rustls", "ring"] }
 
 [dev-dependencies]
 grpc-core = { path = "../grpc-core", features = ["test-helpers"] }

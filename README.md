@@ -12,10 +12,15 @@ Built on **hyper/h2/tower** for HTTP/2, with first-class support for both **Prot
 - Pluggable codecs: Protobuf (prost) and FlatBuffers out of the box
 - Code generation from `.proto` files via [protobuf-rs](https://github.com/shuozeli/protobuf-rs)
 - TLS with rustls (feature-gated)
-- Gzip compression (feature-gated)
+- Compression: gzip, deflate, zstd (all feature-gated)
+- gRPC-Web protocol support (binary and base64 modes)
+- Rich error model (`google.rpc.*` detail types via grpc-types)
+- Round-robin load balancing (BalancedChannel)
+- Concurrency limiting (server-side, semaphore-based)
 - Graceful shutdown
 - Request timeouts
 - Health checking service (`grpc.health.v1.Health`)
+- Server reflection (v1)
 - Interceptors for auth, logging, etc.
 - grpcurl interop verified
 
@@ -101,19 +106,23 @@ println!("{}", response.get_ref().message);
 |-------|-------------|
 | `grpc-core` | Status, Metadata, Codec traits, gRPC framing, Streaming, ProstCodec |
 | `grpc-server` | Grpc handler, service traits, Router, HTTP/2 Server, interceptors |
-| `grpc-client` | Grpc dispatcher, GrpcService trait, Channel, Endpoint |
+| `grpc-client` | Grpc dispatcher, GrpcService trait, Channel, Endpoint, BalancedChannel |
 | `grpc-codegen` | Service IR, server/client code generation |
-| `grpc-build` | `compile_protos()` build.rs entry point |
+| `grpc-build` | `compile_protos()` and `compile_fbs()` build.rs entry points |
 | `grpc-codec-flatbuffers` | FlatBuffers codec + `FlatBufferGrpcMessage` trait |
 | `grpc-health` | gRPC Health Checking service (Check + Watch RPCs) |
 | `grpc-reflection` | gRPC Server Reflection service (v1) |
+| `grpc-types` | Rich error model (`google.rpc.*` detail types, `StatusExt` trait) |
+| `grpc-web` | gRPC-Web protocol translation layer (binary + base64 modes) |
 
 ## Optional Features
 
 | Feature | Crate | Description |
 |---------|-------|-------------|
 | `prost-codec` | grpc-core | Protobuf codec via prost (default) |
-| `gzip` | grpc-core | Gzip compression support |
+| `gzip` | grpc-core, grpc-server, grpc-client | Gzip compression support |
+| `deflate` | grpc-core, grpc-server, grpc-client | Deflate compression support |
+| `zstd` | grpc-core, grpc-server, grpc-client | Zstd compression support |
 | `tls` | grpc-server, grpc-client | TLS via rustls |
 
 ## Architecture
@@ -125,6 +134,8 @@ Application
   |     +-- XxxServer<T> (implements tower::Service)
   |     +-- XxxClient<T> (wraps grpc-client::Grpc<T>)
   |
+  +-- grpc-web (tower layer, wraps server for browser clients)
+  |
   +-- grpc-server
   |     +-- Grpc<T:Codec> handler (4 RPC patterns)
   |     +-- Router (HashMap-based path dispatch)
@@ -134,7 +145,13 @@ Application
   +-- grpc-client
   |     +-- Grpc<T> dispatcher (4 RPC patterns)
   |     +-- Channel (hyper HTTP/2 client, Clone)
+  |     +-- BalancedChannel (round-robin load balancing)
   |     +-- Endpoint builder
+  |
+  +-- grpc-types (google.rpc.* rich error details, StatusExt)
+  |
+  +-- grpc-health (Health Check + Watch RPCs)
+  +-- grpc-reflection (Server Reflection v1)
   |
   +-- grpc-core
         +-- Status/Code (gRPC error model)
@@ -143,7 +160,7 @@ Application
         +-- Codec/Encoder/Decoder traits
         +-- Framing (5-byte header encode/decode)
         +-- Streaming<T> (state machine decoder)
-        +-- Compression (gzip)
+        +-- Compression (gzip, deflate, zstd)
 ```
 
 ## Examples

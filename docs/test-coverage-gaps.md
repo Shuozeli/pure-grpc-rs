@@ -1,6 +1,6 @@
 # Test Coverage Gaps — pure-grpc-rs
 
-Audit date: 2026-03-22. Current: 153 tests passing. Target: 95% branch coverage.
+Audit date: 2026-03-22 (test count updated 2026-03-26). Current: 221 tests passing. Target: 95% branch coverage.
 
 ## Summary
 

@@ -25,6 +25,7 @@ required-features = ["tls"]
 [features]
 default = []
 tls = ["grpc-server/tls", "grpc-client/tls"]
+h3 = ["grpc-server/h3", "grpc-client/h3"]
 
 [dependencies]
 grpc-core = { path = "../../grpc-core", version = "0.1.0" }
@@ -44,6 +45,7 @@ tracing-subscriber = "0.3"
 [dev-dependencies]
 grpc-health = { path = "../../grpc-health", version = "0.1.0" }
 grpc-reflection = { path = "../../grpc-reflection", version = "0.1.0" }
+rcgen = "0.13"
 
 [build-dependencies]
 grpc-build = { path = "../../grpc-build", version = "0.1.0" }

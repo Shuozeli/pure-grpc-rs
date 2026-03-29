@@ -19,8 +19,12 @@ mod balance;
 mod channel;
 mod endpoint;
 mod grpc;
+#[cfg(feature = "h3")]
+mod h3_channel;
 
 pub use self::balance::BalancedChannel;
 pub use self::channel::Channel;
 pub use self::endpoint::Endpoint;
 pub use self::grpc::{Grpc, GrpcService};
+#[cfg(feature = "h3")]
+pub use self::h3_channel::H3Channel;

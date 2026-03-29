@@ -13,6 +13,7 @@ members = [
     "grpc-web",
     "examples/greeter-proto",
     "examples/greeter-fbs",
+    "examples/webtransport-echo",
 ]
 # vendor/tonic is NOT in the workspace — reference only
 exclude = ["vendor"]

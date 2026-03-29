@@ -1,0 +1,26 @@
+[package]
+name = "webtransport-echo"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[[bin]]
+name = "wt-echo-server"
+path = "src/server.rs"
+
+[dependencies]
+h3 = "0.0.8"
+h3-quinn = { version = "0.0.10", features = ["datagram"] }
+sha2 = "0.10"
+h3-webtransport = "0.1.2"
+quinn = { version = "0.11", default-features = false, features = ["runtime-tokio", "rustls", "ring"] }
+rustls = { version = "0.23", default-features = false, features = ["std", "ring"] }
+rustls-pemfile = "2"
+rcgen = "0.13"
+tokio = { version = "1", features = ["full"] }
+base64 = "0.22"
+bytes = "1"
+http = "1"
+tracing = "0.1"
+time = "0.3"
+tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }

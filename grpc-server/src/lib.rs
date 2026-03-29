@@ -22,12 +22,16 @@
 //! ```
 
 mod grpc;
+#[cfg(feature = "h3")]
+mod h3_server;
 mod interceptor;
 mod router;
 mod server;
 mod service;
 
 pub use self::grpc::Grpc;
+#[cfg(feature = "h3")]
+pub use self::h3_server::H3Server;
 pub use self::interceptor::{InterceptedService, Interceptor};
 pub use self::router::Router;
 pub use self::server::Server;

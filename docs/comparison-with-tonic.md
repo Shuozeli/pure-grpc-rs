@@ -15,11 +15,11 @@
 
 | Component | pure-grpc-rs | tonic | Ratio |
 |-----------|-------------|-------|-------|
-| **Total LOC** | 8,857 | 26,233 | **0.34x** |
-| **Core LOC** | 8,857 | 15,035 | **0.59x** |
+| **Total LOC** | 11,081 | 26,233 | **0.42x** |
+| **Core LOC** | 11,081 | 15,035 | **0.74x** |
 | **Crates** | 10 | 8+ | similar |
-| **Rust files** | 49 | 98 | **0.50x** |
-| **Tests** | 103 | N/A | — |
+| **Rust files** | 61 | 98 | **0.62x** |
+| **Tests** | 221 | N/A | -- |
 
 ## Per-Module LOC
 
@@ -48,8 +48,8 @@
 | Pluggable codecs | Yes (Codec trait) | Yes (Codec trait) |
 | TLS (rustls) | Yes (feature-gated) | Yes (feature-gated) |
 | gzip compression | Yes (feature-gated) | Yes (feature-gated) |
-| zstd compression | No | Yes |
-| deflate compression | No | Yes |
+| zstd compression | Yes (feature-gated) | Yes |
+| deflate compression | Yes (feature-gated) | Yes |
 | Graceful shutdown | Yes | Yes |
 | Request timeouts | Yes | Yes |
 | Health checking | Yes (Check + Watch RPCs) | Yes (Check + Watch RPCs) |
@@ -58,8 +58,9 @@
 | Tower middleware | Yes (via tower::Service) | Yes (via tower::Service) |
 | Connection pooling | No (hyper handles it) | Yes (tower::Buffer) |
 | Reconnection | Automatic (hyper-util) | Explicit state machine |
-| Load balancing | No | No (separate `grpc` crate) |
-| gRPC-Web | No | Yes (tonic-web) |
+| Load balancing | Yes (round-robin) | No (separate `grpc` crate) |
+| Rich error model | Yes (grpc-types, google.rpc.*) | Yes (tonic-types) |
+| gRPC-Web | Yes (grpc-web) | Yes (tonic-web) |
 | Router | HashMap-based | Axum-based |
 | Code generation | Yes (protobuf + flatbuffers) | Yes (protobuf only) |
 | build.rs integration | `compile_protos()` + `compile_fbs()` | `compile_protos()` |
@@ -96,16 +97,13 @@ Key difference: pure-grpc-rs has `FlatBuffersCodec` out of the box.
 - **pure-grpc-rs**: `ServiceDef`/`MethodDef` IR in `grpc-codegen`, with both protobuf and flatbuffers adapters. Also integrated directly into `protoc-rs-codegen` and `flatc-rs-codegen` via feature flags.
 
 ## What tonic has that we don't
-1. **gRPC-Web protocol** (tonic-web)
-2. **zstd/deflate compression**
-3. **Reflection v1alpha** (legacy support)
-4. **Richer error model** (tonic-types, google.rpc.Status details)
-5. **Advanced load balancing** (tonic-xds, round-robin, pick-first)
-6. **Extensive metadata API** (Ascii/Binary phantom types, 4K lines)
+1. **Reflection v1alpha** (legacy support)
+2. **Advanced load balancing** (tonic-xds, pick-first, weighted)
+3. **Extensive metadata API** (Ascii/Binary phantom types, 4K lines)
 
 ## What we have that tonic doesn't
 1. **FlatBuffers codec** (pluggable, first-class)
 2. **FlatBuffers build.rs** (`compile_fbs()`)
 3. **Integrated codegen in compilers** (protobuf-rs and flatbuffers-rs both have `grpc` feature)
 4. **Auto-generated FILE_DESCRIPTOR_SET** constant for reflection
-5. **Simpler codebase** (0.30x the size)
+5. **Simpler codebase** (0.42x the size)
