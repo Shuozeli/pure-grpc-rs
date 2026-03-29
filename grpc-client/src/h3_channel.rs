@@ -23,10 +23,7 @@ impl H3Channel {
     ///
     /// `ca_pem` is the PEM-encoded CA certificate for verifying the server.
     /// Use `None` for system-native CA certificates.
-    pub async fn connect(
-        uri: http::Uri,
-        ca_pem: Option<&[u8]>,
-    ) -> Result<Self, BoxError> {
+    pub async fn connect(uri: http::Uri, ca_pem: Option<&[u8]>) -> Result<Self, BoxError> {
         let host = uri.host().ok_or("URI must have a host")?;
         let port = uri.port_u16().unwrap_or(443);
         let addr = tokio::net::lookup_host(format!("{}:{}", host, port))
@@ -68,9 +65,7 @@ impl H3Channel {
     }
 }
 
-fn build_client_tls_config(
-    ca_pem: Option<&[u8]>,
-) -> Result<rustls::ClientConfig, BoxError> {
+fn build_client_tls_config(ca_pem: Option<&[u8]>) -> Result<rustls::ClientConfig, BoxError> {
     let mut root_store = rustls::RootCertStore::empty();
 
     if let Some(ca_pem) = ca_pem {
@@ -107,9 +102,7 @@ impl Service<Request<Body>> for H3Channel {
         let conn = self.conn.clone();
         let timeout = self.timeout;
 
-        let fut = async move {
-            send_h3_request(conn, req).await
-        };
+        let fut = async move { send_h3_request(conn, req).await };
 
         match timeout {
             Some(duration) => Box::pin(async move {
@@ -136,8 +129,7 @@ async fn send_h3_request(
     use http_body::Body as HttpBody;
 
     let remote_addr = conn.remote_address();
-    let (mut driver, mut send_request) =
-        h3::client::new(h3_quinn::Connection::new(conn)).await?;
+    let (mut driver, mut send_request) = h3::client::new(h3_quinn::Connection::new(conn)).await?;
 
     // The driver must be polled to keep the connection alive.
     tokio::spawn(async move {
@@ -155,7 +147,11 @@ async fn send_h3_request(
     // pseudo-headers, which h3 derives from the full URI. Reconstruct it.
     if parts.uri.scheme().is_none() {
         let authority = remote_addr;
-        let path = parts.uri.path_and_query().map(|pq| pq.as_str()).unwrap_or("/");
+        let path = parts
+            .uri
+            .path_and_query()
+            .map(|pq| pq.as_str())
+            .unwrap_or("/");
         parts.uri = http::Uri::builder()
             .scheme("https")
             .authority(authority.to_string())

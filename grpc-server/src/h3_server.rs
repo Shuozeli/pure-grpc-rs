@@ -374,7 +374,6 @@ impl H3RecvBody {
     }
 }
 
-
 impl http_body::Body for H3RecvBody {
     type Data = bytes::Bytes;
     type Error = grpc_core::Status;

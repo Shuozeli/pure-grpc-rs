@@ -86,10 +86,7 @@ impl Greeter for TestGreeter {
 
 /// Generate self-signed TLS certificate and key for localhost testing.
 fn generate_self_signed_cert() -> (Vec<u8>, Vec<u8>) {
-    let subject_alt_names = vec![
-        "localhost".to_string(),
-        "127.0.0.1".to_string(),
-    ];
+    let subject_alt_names = vec!["localhost".to_string(), "127.0.0.1".to_string()];
     let cert = rcgen::generate_simple_self_signed(subject_alt_names).unwrap();
     let cert_pem = cert.cert.pem().into_bytes();
     let key_pem = cert.key_pair.serialize_pem().into_bytes();
@@ -101,8 +98,7 @@ async fn start_h3_server() -> (SocketAddr, Vec<u8>) {
     let (cert_pem, key_pem) = generate_self_signed_cert();
 
     // Bind first to get the actual address, then pass the endpoint to serve.
-    let endpoint =
-        H3Server::bind("127.0.0.1:0".parse().unwrap(), &cert_pem, &key_pem).unwrap();
+    let endpoint = H3Server::bind("127.0.0.1:0".parse().unwrap(), &cert_pem, &key_pem).unwrap();
     let addr = endpoint.local_addr().unwrap();
 
     let greeter = GreeterServer::new(TestGreeter);

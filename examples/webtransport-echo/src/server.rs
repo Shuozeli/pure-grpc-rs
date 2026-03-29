@@ -17,8 +17,7 @@ use tracing::{debug, error, info};
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info".into()),
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
         )
         .init();
 
@@ -35,9 +34,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let endpoint = create_endpoint(addr, &cert_pem, &key_pem)?;
     info!("WebTransport echo server listening on udp://{}", addr);
-    info!(
-        "Open https://localhost:4433/ in Chrome to test"
-    );
+    info!("Open https://localhost:4433/ in Chrome to test");
 
     loop {
         let Some(incoming) = endpoint.accept().await else {
@@ -82,7 +79,12 @@ async fn handle_connection(
         match h3_conn.accept().await {
             Ok(Some(resolver)) => {
                 let (req, stream) = resolver.resolve_request().await?;
-                debug!("request: {} {} {:?}", req.method(), req.uri(), req.extensions().get::<Protocol>());
+                debug!(
+                    "request: {} {} {:?}",
+                    req.method(),
+                    req.uri(),
+                    req.extensions().get::<Protocol>()
+                );
 
                 // Check if this is a WebTransport CONNECT request.
                 let is_wt = req.method() == http::Method::CONNECT
@@ -94,8 +96,7 @@ async fn handle_connection(
 
                 if is_wt {
                     info!("WebTransport session request: {}", req.uri());
-                    let session =
-                        WebTransportSession::accept(req, stream, h3_conn).await?;
+                    let session = WebTransportSession::accept(req, stream, h3_conn).await?;
                     info!("WebTransport session established");
                     handle_wt_session(session).await?;
                     // After session ends, we can't accept more on this h3_conn
@@ -107,10 +108,7 @@ async fn handle_connection(
                 } else {
                     // Unknown request.
                     let mut stream = stream;
-                    let resp = http::Response::builder()
-                        .status(404)
-                        .body(())
-                        .unwrap();
+                    let resp = http::Response::builder().status(404).body(()).unwrap();
                     stream.send_response(resp).await?;
                     stream.finish().await?;
                 }
@@ -190,8 +188,7 @@ async fn serve_html(
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Inject the certificate hash into the HTML so the WebTransport constructor
     // can use serverCertificateHashes for self-signed cert validation.
-    let html = include_str!("../static/index.html")
-        .replace("{{CERT_HASH_B64}}", cert_hash_b64);
+    let html = include_str!("../static/index.html").replace("{{CERT_HASH_B64}}", cert_hash_b64);
     let resp = http::Response::builder()
         .status(200)
         .header("content-type", "text/html")
@@ -208,13 +205,9 @@ fn generate_cert() -> (Vec<u8>, Vec<u8>, Vec<u8>) {
     // 1. Have a validity period of at most 14 days.
     // 2. Use an ECDSA key (P-256).
     use rcgen::{CertificateParams, KeyPair, PKCS_ECDSA_P256_SHA256};
-    
 
-    let mut params = CertificateParams::new(vec![
-        "localhost".to_string(),
-        "127.0.0.1".to_string(),
-    ])
-    .unwrap();
+    let mut params =
+        CertificateParams::new(vec!["localhost".to_string(), "127.0.0.1".to_string()]).unwrap();
     // Set validity to 14 days (maximum for serverCertificateHashes).
     let now = time::OffsetDateTime::now_utc();
     params.not_before = now;
@@ -253,5 +246,9 @@ fn create_endpoint(
 }
 
 fn hex_encode(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(":")
+    bytes
+        .iter()
+        .map(|b| format!("{:02x}", b))
+        .collect::<Vec<_>>()
+        .join(":")
 }
