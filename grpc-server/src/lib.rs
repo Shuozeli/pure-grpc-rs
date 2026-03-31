@@ -31,7 +31,7 @@ mod service;
 
 pub use self::grpc::Grpc;
 #[cfg(feature = "h3")]
-pub use self::h3_server::H3Server;
+pub use self::h3_server::{serve_request as serve_h3_request, H3Server};
 pub use self::interceptor::{InterceptedService, Interceptor};
 pub use self::router::Router;
 pub use self::server::Server;

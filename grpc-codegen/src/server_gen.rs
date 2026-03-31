@@ -85,7 +85,12 @@ pub fn generate(service: &ServiceDef) -> TokenStream {
 
             #(#svc_structs)*
 
-            impl<T: #service_name> tower_service::Service<http::Request<Body>> for #server_name<T> {
+            impl<T, B> tower_service::Service<http::Request<B>> for #server_name<T>
+            where
+                T: #service_name,
+                B: grpc_core::http_body::Body<Data = grpc_core::bytes::Bytes> + Send + 'static,
+                B::Error: Into<grpc_core::BoxError>,
+            {
                 type Response = http::Response<Body>;
                 type Error = Infallible;
                 type Future = BoxFuture<Result<http::Response<Body>, Infallible>>;
@@ -94,7 +99,9 @@ pub fn generate(service: &ServiceDef) -> TokenStream {
                     Poll::Ready(Ok(()))
                 }
 
-                fn call(&mut self, req: http::Request<Body>) -> Self::Future {
+                fn call(&mut self, req: http::Request<B>) -> Self::Future {
+                    let (parts, body) = req.into_parts();
+                    let req = http::Request::from_parts(parts, Body::new(body));
                     let inner = self.inner.clone();
                     match req.uri().path() {
                         #(#dispatch_arms)*

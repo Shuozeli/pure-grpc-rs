@@ -268,7 +268,7 @@ where
 /// Handle a single HTTP/3 request: bridge h3 types to Service<Request<Body>>.
 async fn handle_h3_request<S>(
     resolver: h3::server::RequestResolver<h3_quinn::Connection, bytes::Bytes>,
-    mut svc: S,
+    svc: S,
     timeout: Option<Duration>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>
 where
@@ -276,7 +276,20 @@ where
     S::Future: Send,
 {
     let (req, stream) = resolver.resolve_request().await?;
+    serve_request(req, stream, svc, timeout).await
+}
 
+/// Serve a raw HTTP/3 multiplexing stream natively.
+pub async fn serve_request<S>(
+    req: http::Request<()>,
+    stream: h3::server::RequestStream<h3_quinn::BidiStream<bytes::Bytes>, bytes::Bytes>,
+    mut svc: S,
+    timeout: Option<Duration>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>>
+where
+    S: Service<Request<Body>, Response = Response<Body>, Error = Infallible> + Send,
+    S::Future: Send,
+{
     // Split the bidi stream into send and recv halves.
     // This lets us read the request body while retaining the send half for the response.
     let (send_stream, recv_stream) = stream.split();
@@ -398,7 +411,8 @@ impl http_body::Body for H3RecvBody {
                 }
                 Poll::Ready(Ok(None)) => {
                     this.data_done = true;
-                    // Wake to poll trailers on next call.
+                    // TODO(refactor): wake_by_ref + Pending causes an extra poll cycle;
+                    // restructure to fall through and poll trailers in the same call.
                     cx.waker().wake_by_ref();
                     return Poll::Pending;
                 }

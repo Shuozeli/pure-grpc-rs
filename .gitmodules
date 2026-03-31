@@ -1,6 +1,3 @@
-[submodule "vendor/tonic"]
-	path = vendor/tonic
-	url = https://github.com/hyperium/tonic.git
 [submodule ".claude/rules/shared"]
 	path = .claude/rules/shared
 	url = https://github.com/shuozeli/claude-rules.git

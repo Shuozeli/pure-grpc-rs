@@ -21,6 +21,9 @@ pub mod request;
 pub mod response;
 pub mod status;
 
+pub use bytes;
+pub use http_body;
+
 pub use body::Body;
 pub use codec::Streaming;
 pub use extensions::GrpcMethod;

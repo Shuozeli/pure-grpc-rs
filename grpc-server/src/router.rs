@@ -43,12 +43,14 @@ where
 #[derive(Clone)]
 pub struct Router {
     routes: HashMap<String, Arc<dyn GrpcService>>,
+    fallback: Option<Arc<dyn GrpcService>>,
 }
 
 impl Router {
     pub fn new() -> Self {
         Self {
             routes: HashMap::new(),
+            fallback: None,
         }
     }
 
@@ -68,6 +70,25 @@ impl Router {
         let key = format!("/{name}");
         self.routes
             .insert(key, Arc::new(ServiceWrapper { inner: svc }));
+        self
+    }
+
+    /// Add a fallback service to handle requests that do not match any gRPC route.
+    ///
+    /// The fallback service will receive requests mapped to `Request<grpc_core::body::Body>`
+    /// and can return responses with any type `B` that implements `http_body::Body`.
+    pub fn fallback<S, B>(mut self, svc: S) -> Self
+    where
+        S: Service<Request<Body>, Response = Response<B>, Error = Infallible>
+            + Clone
+            + Send
+            + Sync
+            + 'static,
+        S::Future: Send + 'static,
+        B: http_body::Body<Data = bytes::Bytes> + Send + 'static,
+        B::Error: Into<grpc_core::BoxError>,
+    {
+        self.fallback = Some(Arc::new(FallbackWrapper { inner: svc }));
         self
     }
 
@@ -121,7 +142,35 @@ impl Router {
     }
 }
 
-impl Service<Request<Body>> for Router {
+struct FallbackWrapper<S> {
+    inner: S,
+}
+
+impl<S, B> GrpcService for FallbackWrapper<S>
+where
+    S: Service<Request<Body>, Response = Response<B>, Error = Infallible>
+        + Clone
+        + Send
+        + Sync
+        + 'static,
+    S::Future: Send + 'static,
+    B: http_body::Body<Data = bytes::Bytes> + Send + 'static,
+    B::Error: Into<grpc_core::BoxError>,
+{
+    fn call_box(&self, req: Request<Body>) -> BoxFuture<Result<Response<Body>, Infallible>> {
+        let mut svc = self.inner.clone();
+        Box::pin(async move {
+            let resp = svc.call(req).await?;
+            Ok(resp.map(Body::new))
+        })
+    }
+}
+
+impl<B> Service<Request<B>> for Router
+where
+    B: http_body::Body<Data = bytes::Bytes> + Send + 'static,
+    B::Error: Into<grpc_core::BoxError>,
+{
     type Response = Response<Body>;
     type Error = Infallible;
     type Future = BoxFuture<Result<Response<Body>, Infallible>>;
@@ -130,16 +179,19 @@ impl Service<Request<Body>> for Router {
         Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, req: Request<Body>) -> Self::Future {
+    fn call(&mut self, req: Request<B>) -> Self::Future {
         let path = req.uri().path().to_string();
+        let (parts, body) = req.into_parts();
+        let req = Request::from_parts(parts, Body::new(body));
 
         if let Some(svc) = self.route(&path) {
             svc.call_box(req)
+        } else if let Some(fallback) = &self.fallback {
+            fallback.call_box(req)
         } else {
             Box::pin(async {
                 let status = Status::unimplemented("service not found");
-                let (parts, ()) = status.into_http::<()>().into_parts();
-                Ok(Response::from_parts(parts, Body::empty()))
+                Ok(status.into_http())
             })
         }
     }
@@ -236,12 +288,45 @@ mod tests {
 
         let req = Request::builder()
             .uri("/helloworld.Greeter/SayHello")
-            .body(Body::empty())
+            .body(http_body_util::Empty::<bytes::Bytes>::new())
             .unwrap();
 
         let resp = tower_service::Service::call(&mut layered, req)
             .await
             .unwrap();
         assert_eq!(resp.headers().get("x-service").unwrap(), "greeter");
+    }
+
+    #[tokio::test]
+    async fn fallback_routes_to_fallback_service() {
+        // A standard tower service that just returns a text response with a Full body.
+        let fallback_svc = tower::service_fn(|_req| async {
+            let resp = Response::builder()
+                .header("x-fallback", "true")
+                .body(http_body_util::Full::new(bytes::Bytes::from("hello")))
+                .unwrap();
+            Ok::<_, Infallible>(resp)
+        });
+
+        let mut router = Router::new()
+            .add_service(
+                "helloworld.Greeter",
+                MockService {
+                    name: "greeter".to_string(),
+                },
+            )
+            .fallback(fallback_svc);
+
+        // Request an unknown route
+        let req = Request::builder()
+            .uri("/static/index.html")
+            .body(http_body_util::Empty::<bytes::Bytes>::new())
+            .unwrap();
+
+        let resp = tower_service::Service::call(&mut router, req)
+            .await
+            .unwrap();
+
+        assert_eq!(resp.headers().get("x-fallback").unwrap(), "true");
     }
 }
