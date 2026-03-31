@@ -52,15 +52,15 @@ impl<T> Request<T> {
         self.message
     }
 
-    pub fn into_parts(self) -> (MetadataMap, Extensions, T) {
-        (self.metadata, self.extensions, self.message)
+    pub fn into_parts(self) -> (MetadataMap, T, Extensions) {
+        (self.metadata, self.message, self.extensions)
     }
 
-    pub fn from_parts(metadata: MetadataMap, extensions: Extensions, message: T) -> Self {
+    pub fn from_parts(metadata: MetadataMap, message: T, extensions: Extensions) -> Self {
         Self {
             metadata,
-            extensions,
             message,
+            extensions,
         }
     }
 
@@ -227,10 +227,10 @@ mod tests {
         let mut req = Request::new("hello");
         req.metadata_mut()
             .insert("x-key", http::HeaderValue::from_static("val"));
-        let (meta, ext, msg) = req.into_parts();
+        let (meta, msg, ext) = req.into_parts();
         assert_eq!(msg, "hello");
 
-        let req2 = Request::from_parts(meta, ext, msg);
+        let req2 = Request::from_parts(meta, msg, ext);
         assert_eq!(req2.get_ref(), &"hello");
         assert_eq!(req2.metadata().get("x-key").unwrap(), "val");
     }

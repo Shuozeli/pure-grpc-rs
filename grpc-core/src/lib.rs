@@ -25,7 +25,7 @@ pub use bytes;
 pub use http_body;
 
 pub use body::Body;
-pub use codec::Streaming;
+pub use codec::{decode_grpc_frame, encode_grpc_frame, Streaming};
 pub use extensions::GrpcMethod;
 pub use http2_config::Http2Config;
 pub use metadata::MetadataMap;

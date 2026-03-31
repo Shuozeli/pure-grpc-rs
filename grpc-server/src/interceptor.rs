@@ -80,13 +80,13 @@ where
         let original_headers = std::mem::take(&mut parts.headers);
         let original_extensions = std::mem::take(&mut parts.extensions);
         let metadata = grpc_core::MetadataMap::from_headers(original_headers);
-        let interceptor_req = grpc_core::Request::from_parts(metadata, original_extensions, ());
+        let interceptor_req = grpc_core::Request::from_parts(metadata, (), original_extensions);
 
         // Run interceptor
         match self.interceptor.intercept(interceptor_req) {
             Ok(intercepted) => {
                 // Put the (possibly modified) metadata/extensions back
-                let (new_metadata, new_extensions, _) = intercepted.into_parts();
+                let (new_metadata, _, new_extensions) = intercepted.into_parts();
                 parts.headers = new_metadata.into_headers();
                 parts.extensions = new_extensions;
 

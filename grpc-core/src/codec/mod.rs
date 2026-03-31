@@ -20,6 +20,30 @@ pub use self::encode::EncodeBody;
 /// gRPC frame header size: 1 byte compression flag + 4 bytes length.
 pub const HEADER_SIZE: usize = std::mem::size_of::<u8>() + std::mem::size_of::<u32>();
 
+/// Wrap a serialized message payload in a gRPC length-prefix frame.
+///
+/// Format: 1-byte compression flag (0 = no compression) followed by a
+/// 4-byte big-endian message length, then the payload bytes.
+pub fn encode_grpc_frame(payload: &[u8]) -> Vec<u8> {
+    let mut frame = Vec::with_capacity(HEADER_SIZE + payload.len());
+    frame.push(0); // no compression
+    frame.extend_from_slice(&(payload.len() as u32).to_be_bytes());
+    frame.extend_from_slice(payload);
+    frame
+}
+
+/// Strip the gRPC length-prefix frame header from a response body.
+///
+/// Returns the raw payload bytes (everything after the 5-byte header),
+/// or the full slice unchanged if it is shorter than [`HEADER_SIZE`].
+pub fn decode_grpc_frame(frame: &[u8]) -> &[u8] {
+    if frame.len() >= HEADER_SIZE {
+        &frame[HEADER_SIZE..]
+    } else {
+        frame
+    }
+}
+
 const DEFAULT_CODEC_BUFFER_SIZE: usize = 8 * 1024;
 const DEFAULT_YIELD_THRESHOLD: usize = 32 * 1024;
 const DEFAULT_MAX_RECV_MESSAGE_SIZE: usize = 4 * 1024 * 1024;

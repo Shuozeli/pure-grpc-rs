@@ -4,6 +4,7 @@ use grpc_core::codec::compression::{
 };
 use grpc_core::codec::{Codec, Decoder, EncodeBody, Streaming};
 use grpc_core::metadata::GRPC_CONTENT_TYPE;
+use grpc_core::request::IntoRequest;
 use grpc_core::{Code, Request, Response, Status};
 use http::header::{HeaderValue, CONTENT_TYPE, TE};
 use http::uri::{PathAndQuery, Uri};
@@ -109,9 +110,12 @@ impl<T> Grpc<T> {
     }
 
     /// Send a single unary gRPC request.
+    ///
+    /// Accepts either a plain message or a [`Request`] wrapping a message,
+    /// so callers do not need to construct `Request::new(msg)` manually.
     pub async fn unary<M1, M2, C>(
         &mut self,
-        request: Request<M1>,
+        request: impl IntoRequest<M1>,
         path: PathAndQuery,
         codec: C,
     ) -> Result<Response<M2>, Status>
@@ -123,7 +127,7 @@ impl<T> Grpc<T> {
         M1: Send + Sync + 'static,
         M2: Send + Sync + 'static,
     {
-        let request = request.map(|m| tokio_stream::once(m));
+        let request = request.into_request().map(|m| tokio_stream::once(m));
         self.client_streaming(request, path, codec).await
     }
 
@@ -165,9 +169,12 @@ impl<T> Grpc<T> {
     }
 
     /// Send a server-streaming gRPC request.
+    ///
+    /// Accepts either a plain message or a [`Request`] wrapping a message,
+    /// so callers do not need to construct `Request::new(msg)` manually.
     pub async fn server_streaming<M1, M2, C>(
         &mut self,
-        request: Request<M1>,
+        request: impl IntoRequest<M1>,
         path: PathAndQuery,
         codec: C,
     ) -> Result<Response<Streaming<M2>>, Status>
@@ -179,7 +186,7 @@ impl<T> Grpc<T> {
         M1: Send + Sync + 'static,
         M2: Send + Sync + 'static,
     {
-        let request = request.map(|m| tokio_stream::once(m));
+        let request = request.into_request().map(|m| tokio_stream::once(m));
         self.streaming(request, path, codec).await
     }
 
@@ -422,16 +429,11 @@ mod tests {
 
     // --- Mock transport for client Grpc tests ---
 
-    use bytes::{BufMut, BytesMut};
     use grpc_core::codec::test_helpers::{TestCodec, TestDecoder};
 
     /// Build a gRPC-framed response body (for mock transport)
     fn build_grpc_response_body(payload: &[u8]) -> bytes::Bytes {
-        let mut buf = BytesMut::new();
-        buf.put_u8(0); // no compression
-        buf.put_u32(payload.len() as u32);
-        buf.put_slice(payload);
-        buf.freeze()
+        bytes::Bytes::from(grpc_core::encode_grpc_frame(payload))
     }
 
     /// A mock transport that echoes the payload back in a proper gRPC response
@@ -457,7 +459,7 @@ mod tests {
                 let data = collected.to_bytes();
 
                 // Extract the payload from the gRPC frame
-                let payload = if data.len() >= 5 { &data[5..] } else { &[] };
+                let payload = grpc_core::decode_grpc_frame(&data);
 
                 let response_body = build_grpc_response_body(payload);
 
