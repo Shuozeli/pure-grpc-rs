@@ -8,6 +8,7 @@
 //! - `flatbuffers` module (feature = "flatbuffers"): from flatbuffers-rs `ResolvedService`
 
 pub mod client_gen;
+pub mod dart_client_gen;
 pub mod ir;
 pub mod server_gen;
 

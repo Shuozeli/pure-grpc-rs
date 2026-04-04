@@ -1,12 +1,32 @@
 //! Adapter from flatbuffers-rs schema types to grpc-codegen IR.
 
+use crate::dart_client_gen;
 use crate::ir::{MethodDef, ServiceDef};
 use flatc_rs_schema::resolved::{ResolvedRpcCall, ResolvedSchema, ResolvedService};
 use flatc_rs_schema::Attributes;
 use heck::ToSnakeCase;
 
-/// Default codec path for FlatBuffers-based codegen.
+/// Default codec path for FlatBuffers-based codegen (Rust only).
+///
+/// Note: `codec_path` is used by Rust client codegen to instantiate the codec
+/// (e.g., `grpc_codec_flatbuffers::FlatBuffersCodec`). Dart codegen ignores
+/// this field entirely and generates its own serialize/deserialize functions.
 const DEFAULT_CODEC_PATH: &str = "grpc_codec_flatbuffers::FlatBuffersCodec";
+
+/// Generate Dart gRPC client code from a flatbuffers-rs `ResolvedService`.
+///
+/// `schema` is needed to resolve request/response type names from object indices.
+/// `proto_path` is the import path prefix for the generated Dart types.
+///
+/// Returns Dart source code for a gRPC client class.
+pub fn generate_dart_client(
+    service: &ResolvedService,
+    schema: &ResolvedSchema,
+    proto_path: &str,
+) -> Result<String, String> {
+    let service_def = service_from_fbs(service, schema, proto_path)?;
+    Ok(dart_client_gen::generate(&service_def, proto_path))
+}
 
 /// Convert a flatbuffers-rs `ResolvedService` into a `ServiceDef`.
 ///
