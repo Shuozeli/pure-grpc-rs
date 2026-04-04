@@ -52,10 +52,13 @@ pub fn generate(service: &ServiceDef, proto_path: &str) -> String {
     .unwrap();
 
     // Import the generated FlatBuffers types
+    // service.package uses dots (e.g., "rterm_rterm.protocol") but Dart imports
+    // use slashes (e.g., "rterm_rterm/protocol_generated.dart")
     let package_import = if service.package.is_empty() {
         format!("{proto_path}_generated.dart")
     } else {
-        format!("package:{}/{}_generated.dart", proto_path, service.package)
+        let package_path = service.package.replace('.', "/");
+        format!("package:{}/{}_generated.dart", proto_path, package_path)
     };
     writeln!(&mut output, "import '{package_import}';").unwrap();
     writeln!(&mut output).unwrap();
@@ -158,7 +161,7 @@ fn gen_dart_method(mut output: &mut String, method: &MethodDef, service_fqn: &st
     // Generate the ClientMethod descriptor
     writeln!(
         &mut output,
-        "  static final _$method_name_snake = grpc.ClientMethod<{input_type}, {output_type}>("
+        "  static final _{method_name_snake} = grpc.ClientMethod<{input_type}, {output_type}>("
     )
     .unwrap();
     writeln!(&mut output, "    '{grpc_path}',").unwrap();
@@ -199,7 +202,7 @@ fn gen_unary_method(
     writeln!(output, "    grpc.CallOptions? options,").unwrap();
     writeln!(output, "  }}) async {{").unwrap();
     writeln!(output, "    final response = await runUnary(").unwrap();
-    writeln!(output, "      _$method_name_snake,").unwrap();
+    writeln!(output, "      _{method_name_snake},").unwrap();
     writeln!(output, "      request,").unwrap();
     writeln!(output, "      options: options,").unwrap();
     writeln!(output, "    );").unwrap();
@@ -223,7 +226,7 @@ fn gen_server_streaming_method(
     writeln!(output, "  }}) {{").unwrap();
     writeln!(
         output,
-        "    return runServerStreaming(_$method_name_snake, request, options: options);"
+        "    return runServerStreaming(_{method_name_snake}, request, options: options);"
     )
     .unwrap();
     writeln!(output, "  }}").unwrap();
@@ -241,7 +244,7 @@ fn gen_client_streaming_method(
     writeln!(output, "  }}) async {{").unwrap();
     writeln!(
         output,
-        "    final response = await runClientStreaming(_$method_name_snake, request, options: options);"
+        "    final response = await runClientStreaming(_{method_name_snake}, request, options: options);"
     )
     .unwrap();
     writeln!(output, "    return response;").unwrap();
@@ -264,7 +267,7 @@ fn gen_bidi_streaming_method(
     writeln!(output, "  }}) {{").unwrap();
     writeln!(
         output,
-        "    return runBidirectionalStreaming(_$method_name_snake, request, options: options);"
+        "    return runBidirectionalStreaming(_{method_name_snake}, request, options: options);"
     )
     .unwrap();
     writeln!(output, "  }}").unwrap();
