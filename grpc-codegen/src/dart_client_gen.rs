@@ -335,6 +335,12 @@ fn extract_short_name(fully_qualified: &str) -> String {
 /// Extract the type name from a fully qualified path, converting to Dart's `.` separator.
 /// Used for Dart type annotations where the package separator matters.
 fn extract_type_name(fully_qualified: &str) -> String {
+    // Handle proto_path="." case: flatbuffers.rs formats as ".::TypeName",
+    // then .replace("::", ".") produces "..TypeName" (invalid).
+    // Strip the leading ".:" to get just "TypeName".
+    if fully_qualified.starts_with(".::") {
+        return fully_qualified[3..].to_string();
+    }
     // Convert Rust's "::" separator to Dart's "." separator
     // e.g., "super::HelloRequest" -> "super.HelloRequest"
     fully_qualified.replace("::", ".")
@@ -451,5 +457,38 @@ mod tests {
         assert!(code.contains("required int port"));
         assert!(code.contains("grpc.ClientChannel("));
         assert!(code.contains("ChannelCredentials.insecure()"));
+    }
+
+    /// Regression test: proto_path="." should produce valid Dart type names, not "..TypeName".
+    /// When proto_path=".", flatbuffers.rs formats input_type as ".::TypeName".
+    /// extract_type_name must strip the leading ".:" to avoid "..TypeName".
+    #[test]
+    fn proto_path_dot_produces_valid_dart_types() {
+        let svc = ServiceDef {
+            name: "Terminal".into(),
+            package: "rterm.protocol".into(),
+            proto_name: "TerminalService".into(),
+            comments: vec![],
+            methods: vec![MethodDef {
+                name: "session".into(),
+                proto_name: "Session".into(),
+                // Simulates what flatbuffers.rs produces with proto_path="."
+                input_type: ".::ClientMessage".into(),
+                output_type: ".::ServerMessage".into(),
+                client_streaming: true,
+                server_streaming: true,
+                codec_path: "Codec".into(),
+                comments: vec![],
+            }],
+        };
+        let code = generate(&svc, ".");
+        // Must NOT contain "..ClientMessage" or "..ServerMessage"
+        assert!(!code.contains("..ClientMessage"));
+        assert!(!code.contains("..ServerMessage"));
+        // Must contain valid type references
+        assert!(code.contains("ClientMessage"));
+        assert!(code.contains("ServerMessage"));
+        // Must compile as valid Dart: ClientMethod<ClientMessage, ServerMessage>
+        assert!(code.contains("ClientMethod<ClientMessage, ServerMessage>"));
     }
 }
