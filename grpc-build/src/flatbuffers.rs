@@ -1,7 +1,65 @@
-//! Compile .fbs files into Rust FlatBuffers types + gRPC service stubs.
+//! Compile .fbs files into Rust FlatBuffers types + gRPC service stubs (Rust)
+//! or Dart gRPC client stubs (Dart).
 
 use std::io;
 use std::path::{Path, PathBuf};
+
+/// Compile `.fbs` files into Dart gRPC client code.
+///
+/// Parses and analyzes the FlatBuffers schema using flatbuffers-rs, generates
+/// Dart gRPC client classes via grpc-codegen. Each service generates a separate
+/// `.dart` file. Output is written to `OUT_DIR`.
+///
+/// The FlatBuffers data types (tables, structs, enums) must be generated
+/// separately using `flatc --dart` or the flatbuffers-rs Dart generator.
+///
+/// # Arguments
+///
+/// * `fbs_files` - Paths to `.fbs` files to compile.
+/// * `includes` - Include directories for import resolution.
+/// * `proto_path` - Import path prefix for the generated Dart types (e.g., `"package:myapp"`).
+///
+/// # Example
+///
+/// In `build.rs`:
+/// ```ignore
+/// fn main() {
+///     grpc_build::compile_fbs_dart(
+///         &["schema/greeter.fbs"],
+///         &["schema"],
+///         "package:myapp",
+///     ).unwrap();
+/// }
+/// ```
+pub fn compile_fbs_dart(
+    fbs_files: &[impl AsRef<Path>],
+    includes: &[impl AsRef<Path>],
+    proto_path: &str,
+) -> io::Result<()> {
+    let out_dir =
+        std::env::var("OUT_DIR").map_err(|e| io::Error::other(format!("OUT_DIR not set: {e}")))?;
+
+    let include_paths: Vec<PathBuf> = includes.iter().map(|p| p.as_ref().to_path_buf()).collect();
+    let input_files: Vec<PathBuf> = fbs_files.iter().map(|p| p.as_ref().to_path_buf()).collect();
+
+    let options = flatc_rs_compiler::CompilerOptions { include_paths };
+
+    let result = flatc_rs_compiler::compile(&input_files, &options)
+        .map_err(|e| io::Error::other(format!("flatbuffers compilation failed: {e}")))?;
+
+    // Generate Dart client code for each service
+    for service in &result.schema.services {
+        let code =
+            grpc_codegen::flatbuffers::generate_dart_client(service, &result.schema, proto_path)
+                .map_err(|e| io::Error::other(format!("Dart client codegen failed: {e}")))?;
+
+        let out_file =
+            Path::new(&out_dir).join(format!("{}_client.dart", service.name.to_lowercase()));
+        std::fs::write(&out_file, &code)?;
+    }
+
+    Ok(())
+}
 
 /// Compile `.fbs` files into Rust FlatBuffers types + gRPC service stubs.
 ///
@@ -174,5 +232,66 @@ rpc_service Greeter {
         let code = std::fs::read_to_string(&rs_file).unwrap();
         assert!(code.contains("HelloRequest"), "should contain HelloRequest");
         assert!(code.contains("HelloReply"), "should contain HelloReply");
+    }
+
+    #[test]
+    fn compile_fbs_dart_generates_client() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let fbs_dir = tmp.path().join("schema");
+        std::fs::create_dir_all(&fbs_dir).unwrap();
+
+        std::fs::write(
+            fbs_dir.join("greeter.fbs"),
+            r#"namespace helloworld;
+
+table HelloRequest {
+    name: string;
+}
+
+table HelloReply {
+    message: string;
+}
+
+rpc_service Greeter {
+    SayHello(HelloRequest): HelloReply;
+}
+"#,
+        )
+        .unwrap();
+
+        unsafe { std::env::set_var("OUT_DIR", tmp.path().to_str().unwrap()) };
+
+        compile_fbs_dart(&[fbs_dir.join("greeter.fbs")], &[&fbs_dir], "helloworld").unwrap();
+
+        let dart_file = tmp.path().join("greeter_client.dart");
+        assert!(dart_file.exists(), "should generate greeter_client.dart");
+
+        let code = std::fs::read_to_string(&dart_file).unwrap();
+        assert!(
+            code.contains("class GreeterClient extends grpc.Client"),
+            "should contain GreeterClient"
+        );
+        assert!(
+            code.contains("say_hello"),
+            "should contain say_hello method"
+        );
+    }
+
+    #[test]
+    fn compile_fbs_dart_error_when_out_dir_not_set() {
+        let saved = std::env::var("OUT_DIR").ok();
+        unsafe { std::env::remove_var("OUT_DIR") };
+
+        let result = compile_fbs_dart(&["nonexistent.fbs"], &["."], "pkg");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string().contains("OUT_DIR not set"),
+            "expected OUT_DIR error, got: {err}"
+        );
+
+        if let Some(val) = saved {
+            unsafe { std::env::set_var("OUT_DIR", val) };
+        }
     }
 }

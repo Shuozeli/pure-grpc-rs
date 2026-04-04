@@ -8,4 +8,4 @@ mod flatbuffers;
 pub use protobuf::compile_protos;
 
 #[cfg(feature = "flatbuffers")]
-pub use flatbuffers::compile_fbs;
+pub use flatbuffers::{compile_fbs, compile_fbs_dart};

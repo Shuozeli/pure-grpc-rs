@@ -273,11 +273,8 @@ fn gen_bidi_streaming_method(
 /// Generate serialization helper functions for a type.
 ///
 /// Uses the FlatBuffers Builder API to serialize/deserialize messages.
-/// Serialization populates a fb.Builder table directly.
+/// Serialization leverages the generated table's unpack() and T.pack() methods.
 /// Deserialization uses the generated table's constructor that accepts bytes.
-///
-/// Note: Field mapping in the serializer requires schema knowledge (field IDs, types).
-/// A TODO comment marks where field mapping code must be inserted.
 fn gen_serializers(output: &mut String, types: &[String]) {
     // Request serializers
     writeln!(output, "  // Serialization helpers").unwrap();
@@ -290,17 +287,7 @@ fn gen_serializers(output: &mut String, types: &[String]) {
         .unwrap();
         writeln!(
             output,
-            "    // NOTE: Field mapping must be implemented below."
-        )
-        .unwrap();
-        writeln!(
-            output,
-            "    // Use request.fieldName to access fields and builder.addXxx to serialize."
-        )
-        .unwrap();
-        writeln!(
-            output,
-            "    // Field IDs and types must match the FlatBuffers schema definition."
+            "    // Serialize by unpacking to T class and using T.pack() to build the table."
         )
         .unwrap();
         writeln!(
@@ -308,25 +295,12 @@ fn gen_serializers(output: &mut String, types: &[String]) {
             "    final builder = fb.Builder(deduplicateTables: false);"
         )
         .unwrap();
-        writeln!(output, "    // TODO: builder.startTable(<field_count>);").unwrap();
         writeln!(
             output,
-            "    // TODO: builder.addString(<field_id>, request.<field_name>);"
+            "    builder.finish(request.unpack().pack(builder));"
         )
         .unwrap();
-        writeln!(
-            output,
-            "    // TODO: builder.addInt64(<field_id>, request.<field_name>);"
-        )
-        .unwrap();
-        writeln!(output, "    // ... add other fields ...").unwrap();
-        writeln!(output, "    // builder.finish(builder.endTable());").unwrap();
-        writeln!(output, "    // return builder.buffer;").unwrap();
-        writeln!(
-            output,
-            "    throw UnimplementedError('Field mapping not implemented for {type_name}');"
-        )
-        .unwrap();
+        writeln!(output, "    return builder.buffer;").unwrap();
         writeln!(output, "  }}").unwrap();
 
         writeln!(output).unwrap();
