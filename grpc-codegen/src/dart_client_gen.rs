@@ -201,7 +201,7 @@ fn gen_unary_method(
     writeln!(output, "    {input_type} request, {{").unwrap();
     writeln!(output, "    grpc.CallOptions? options,").unwrap();
     writeln!(output, "  }}) async {{").unwrap();
-    writeln!(output, "    final response = await \\$createUnaryCall(").unwrap();
+    writeln!(output, "    final response = await $createUnaryCall(").unwrap();
     writeln!(output, "      _{method_name_snake},").unwrap();
     writeln!(output, "      request,").unwrap();
     writeln!(output, "      options: options,").unwrap();
@@ -226,7 +226,7 @@ fn gen_server_streaming_method(
     writeln!(output, "  }}) {{").unwrap();
     writeln!(
         output,
-        "    return \\$createStreamingCall(_{method_name_snake}, Stream.value(request), options: options);"
+        "    return $createStreamingCall(_{method_name_snake}, Stream.value(request), options: options);"
     )
     .unwrap();
     writeln!(output, "  }}").unwrap();
@@ -244,7 +244,7 @@ fn gen_client_streaming_method(
     writeln!(output, "  }}) async {{").unwrap();
     writeln!(
         output,
-        "    final response = await \\$createStreamingCall(_{method_name_snake}, request, options: options);"
+        "    final response = await $createStreamingCall(_{method_name_snake}, request, options: options);"
     )
     .unwrap();
     writeln!(output, "    return response;").unwrap();
@@ -267,7 +267,7 @@ fn gen_bidi_streaming_method(
     writeln!(output, "  }}) {{").unwrap();
     writeln!(
         output,
-        "    return \\$createStreamingCall(_{method_name_snake}, request, options: options);"
+        "    return $createStreamingCall(_{method_name_snake}, request, options: options);"
     )
     .unwrap();
     writeln!(output, "  }}").unwrap();
