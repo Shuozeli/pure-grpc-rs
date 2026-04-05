@@ -1,97 +1,8 @@
-/// Intermediate representation for a gRPC service definition.
-///
-/// Codec-agnostic — can be built from protobuf or flatbuffers schemas.
-#[derive(Debug, Clone)]
-pub struct ServiceDef {
-    /// The service name (e.g., `"Greeter"`).
-    pub name: String,
-    /// The fully-qualified package (e.g., `"helloworld"`).
-    pub package: String,
-    /// The proto identifier (e.g., `"Greeter"`).
-    pub proto_name: String,
-    /// RPC methods in this service.
-    pub methods: Vec<MethodDef>,
-    /// Doc comments.
-    pub comments: Vec<String>,
-}
+//! Intermediate representation for gRPC service definitions.
+//!
+//! Re-exports types from [`codegen_schema`] and adds gRPC-specific helpers.
 
-/// Intermediate representation for a single RPC method.
-#[derive(Debug, Clone)]
-pub struct MethodDef {
-    /// Rust-style method name in snake_case (e.g., `"say_hello"`).
-    pub name: String,
-    /// Proto-style method name (e.g., `"SayHello"`).
-    pub proto_name: String,
-    /// Fully-qualified input type path (e.g., `"super::HelloRequest"`).
-    pub input_type: String,
-    /// Fully-qualified output type path (e.g., `"super::HelloReply"`).
-    pub output_type: String,
-    /// Whether the client sends a stream of messages.
-    pub client_streaming: bool,
-    /// Whether the server returns a stream of messages.
-    pub server_streaming: bool,
-    /// The codec path to use (e.g., `"grpc_core::codec::prost_codec::ProstCodec"`).
-    pub codec_path: String,
-    /// Doc comments.
-    pub comments: Vec<String>,
-}
-
-impl ServiceDef {
-    /// Fully-qualified gRPC service name (e.g., `"helloworld.Greeter"`).
-    pub fn fully_qualified_name(&self) -> String {
-        if self.package.is_empty() {
-            self.proto_name.clone()
-        } else {
-            format!("{}.{}", self.package, self.proto_name)
-        }
-    }
-
-    /// Validate that this definition will produce correct generated code.
-    ///
-    /// Returns a list of problems. An empty vec means the definition is valid.
-    pub fn validate(&self) -> Vec<String> {
-        let mut errors = Vec::new();
-        if self.name.is_empty() {
-            errors.push("service name is empty".into());
-        }
-        if self.proto_name.is_empty() {
-            errors.push("service proto_name is empty".into());
-        }
-        for (i, m) in self.methods.iter().enumerate() {
-            if m.name.is_empty() {
-                errors.push(format!("method[{i}] name is empty"));
-            }
-            if m.proto_name.is_empty() {
-                errors.push(format!("method[{i}] proto_name is empty"));
-            }
-            if m.proto_name.contains('/') {
-                errors.push(format!(
-                    "method[{i}] proto_name `{}` contains '/'",
-                    m.proto_name
-                ));
-            }
-            if m.input_type.is_empty() {
-                errors.push(format!("method[{i}] `{}` input_type is empty", m.name));
-            }
-            if m.output_type.is_empty() {
-                errors.push(format!("method[{i}] `{}` output_type is empty", m.name));
-            }
-        }
-        errors
-    }
-}
-
-impl MethodDef {
-    /// gRPC path for this method (e.g., `"/helloworld.Greeter/SayHello"`).
-    pub fn grpc_path(&self, service_fqn: &str) -> String {
-        debug_assert!(
-            !self.proto_name.contains('/'),
-            "proto_name must not contain '/', got: {:?}",
-            self.proto_name
-        );
-        format!("/{service_fqn}/{}", self.proto_name)
-    }
-}
+pub use codegen_schema::{MethodDef, ServiceDef, StreamingType};
 
 /// Convert comment strings into `#[doc = "..."]` token streams.
 pub fn comments_to_doc_tokens(comments: &[String]) -> proc_macro2::TokenStream {
@@ -112,15 +23,13 @@ mod tests {
     fn sample_service() -> ServiceDef {
         ServiceDef {
             name: "Greeter".into(),
-            package: "helloworld".into(),
-            proto_name: "Greeter".into(),
+            package: Some("helloworld".into()),
             methods: vec![MethodDef {
-                name: "say_hello".into(),
-                proto_name: "SayHello".into(),
-                input_type: "super::HelloRequest".into(),
-                output_type: "super::HelloReply".into(),
-                client_streaming: false,
-                server_streaming: false,
+                name: "SayHello".into(),
+                rust_name: None,
+                input_type: "HelloRequest".into(),
+                output_type: "HelloReply".into(),
+                streaming: StreamingType::None,
                 codec_path: "grpc_core::codec::prost_codec::ProstCodec".into(),
                 comments: vec![],
             }],
@@ -136,8 +45,12 @@ mod tests {
 
     #[test]
     fn fully_qualified_name_no_package() {
-        let mut svc = sample_service();
-        svc.package = String::new();
+        let svc = ServiceDef {
+            name: "Greeter".into(),
+            package: None,
+            methods: vec![],
+            comments: vec![],
+        };
         assert_eq!(svc.fully_qualified_name(), "Greeter");
     }
 
@@ -152,25 +65,83 @@ mod tests {
     }
 
     #[test]
-    fn validate_valid_service() {
-        let svc = sample_service();
-        assert!(svc.validate().is_empty());
+    fn streaming_bools_none() {
+        let method = MethodDef {
+            name: "Unary".into(),
+            rust_name: None,
+            input_type: "Req".into(),
+            output_type: "Resp".into(),
+            streaming: StreamingType::None,
+            codec_path: "Codec".into(),
+            comments: vec![],
+        };
+        let (client, server) = match method.streaming {
+            StreamingType::None => (false, false),
+            StreamingType::Server => (false, true),
+            StreamingType::Client => (true, false),
+            StreamingType::BiDi => (true, true),
+        };
+        assert_eq!((client, server), (false, false));
     }
 
     #[test]
-    fn validate_catches_empty_name() {
-        let mut svc = sample_service();
-        svc.name = String::new();
-        let errors = svc.validate();
-        assert!(errors.iter().any(|e| e.contains("service name is empty")));
+    fn streaming_bools_server() {
+        let method = MethodDef {
+            name: "ServerStream".into(),
+            rust_name: None,
+            input_type: "Req".into(),
+            output_type: "Resp".into(),
+            streaming: StreamingType::Server,
+            codec_path: "Codec".into(),
+            comments: vec![],
+        };
+        let (client, server) = match method.streaming {
+            StreamingType::None => (false, false),
+            StreamingType::Server => (false, true),
+            StreamingType::Client => (true, false),
+            StreamingType::BiDi => (true, true),
+        };
+        assert_eq!((client, server), (false, true));
     }
 
     #[test]
-    fn validate_catches_slash_in_proto_name() {
-        let mut svc = sample_service();
-        svc.methods[0].proto_name = "Say/Hello".into();
-        let errors = svc.validate();
-        assert!(errors.iter().any(|e| e.contains("contains '/'")));
+    fn streaming_bools_client() {
+        let method = MethodDef {
+            name: "ClientStream".into(),
+            rust_name: None,
+            input_type: "Req".into(),
+            output_type: "Resp".into(),
+            streaming: StreamingType::Client,
+            codec_path: "Codec".into(),
+            comments: vec![],
+        };
+        let (client, server) = match method.streaming {
+            StreamingType::None => (false, false),
+            StreamingType::Server => (false, true),
+            StreamingType::Client => (true, false),
+            StreamingType::BiDi => (true, true),
+        };
+        assert_eq!((client, server), (true, false));
+    }
+
+    #[test]
+    fn streaming_bools_bidi() {
+        let method = MethodDef {
+            name: "BiDi".into(),
+            rust_name: None,
+            input_type: "Req".into(),
+            output_type: "Resp".into(),
+            streaming: StreamingType::BiDi,
+            codec_path: "Codec".into(),
+            comments: vec![],
+        };
+        let (client, server) = match method.streaming {
+            StreamingType::None => (false, false),
+            StreamingType::Server => (false, true),
+            StreamingType::Client => (true, false),
+            StreamingType::BiDi => (true, true),
+        };
+        assert_eq!((client, server), (true, true));
     }
 
     /// G1: Test comments_to_doc_tokens directly.

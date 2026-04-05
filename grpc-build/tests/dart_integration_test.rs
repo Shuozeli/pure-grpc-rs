@@ -51,8 +51,8 @@ rpc_service Greeter {
         .unwrap();
 
     // Verify the generated file exists
-    let dart_file = tmp.path().join("greeter_client.dart");
-    assert!(dart_file.exists(), "should generate greeter_client.dart");
+    let dart_file = tmp.path().join("grpc_clients.dart");
+    assert!(dart_file.exists(), "should generate grpc_clients.dart");
 
     let code = std::fs::read_to_string(&dart_file).unwrap();
 
@@ -127,14 +127,10 @@ rpc_service ServiceB {
 
     grpc_build::compile_fbs_dart(&[fbs_dir.join("multi.fbs")], &[&fbs_dir], "test").unwrap();
 
-    // Should generate separate files for each service
+    // Should generate combined file with all services
     assert!(
-        Path::new(tmp.path().join("servicea_client.dart").to_str().unwrap()).exists(),
-        "should generate servicea_client.dart"
-    );
-    assert!(
-        Path::new(tmp.path().join("serviceb_client.dart").to_str().unwrap()).exists(),
-        "should generate serviceb_client.dart"
+        Path::new(tmp.path().join("grpc_clients.dart").to_str().unwrap()).exists(),
+        "should generate grpc_clients.dart"
     );
 }
 

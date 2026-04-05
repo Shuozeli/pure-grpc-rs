@@ -1,4 +1,4 @@
-use crate::ir::{comments_to_doc_tokens, MethodDef, ServiceDef};
+use crate::ir::{comments_to_doc_tokens, MethodDef, ServiceDef, StreamingType};
 use heck::{ToSnakeCase, ToUpperCamelCase};
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
@@ -35,7 +35,7 @@ pub fn generate(service: &ServiceDef) -> TokenStream {
     let trait_assoc_types = service
         .methods
         .iter()
-        .filter(|m| m.server_streaming)
+        .filter(|m| matches!(m.streaming, StreamingType::Server | StreamingType::BiDi))
         .map(gen_trait_assoc_type);
 
     let svc_structs = service
@@ -117,7 +117,7 @@ pub fn generate(service: &ServiceDef) -> TokenStream {
 }
 
 fn gen_trait_method(method: &MethodDef) -> TokenStream {
-    let name = format_ident!("{}", method.name);
+    let name = format_ident!("{}", method.rust_name());
     let input: TokenStream = method
         .input_type
         .parse()
@@ -127,32 +127,32 @@ fn gen_trait_method(method: &MethodDef) -> TokenStream {
         .parse()
         .unwrap_or_else(|e| panic!("invalid output_type `{}`: {e}", method.output_type));
 
-    match (method.client_streaming, method.server_streaming) {
-        (false, false) => {
+    match method.streaming {
+        StreamingType::None => {
             // Unary
             quote! {
                 fn #name(&self, request: Request<#input>)
                     -> BoxFuture<Result<Response<#output>, Status>>;
             }
         }
-        (false, true) => {
+        StreamingType::Server => {
             // Server streaming
-            let stream_type = response_stream_ident(&method.proto_name);
+            let stream_type = response_stream_ident(&method.name);
             quote! {
                 fn #name(&self, request: Request<#input>)
                     -> BoxFuture<Result<Response<Self::#stream_type>, Status>>;
             }
         }
-        (true, false) => {
+        StreamingType::Client => {
             // Client streaming
             quote! {
                 fn #name(&self, request: Request<Streaming<#input>>)
                     -> BoxFuture<Result<Response<#output>, Status>>;
             }
         }
-        (true, true) => {
+        StreamingType::BiDi => {
             // Bidi streaming
-            let stream_type = response_stream_ident(&method.proto_name);
+            let stream_type = response_stream_ident(&method.name);
             quote! {
                 fn #name(&self, request: Request<Streaming<#input>>)
                     -> BoxFuture<Result<Response<Self::#stream_type>, Status>>;
@@ -162,7 +162,7 @@ fn gen_trait_method(method: &MethodDef) -> TokenStream {
 }
 
 fn gen_trait_assoc_type(method: &MethodDef) -> TokenStream {
-    let stream_type = response_stream_ident(&method.proto_name);
+    let stream_type = response_stream_ident(&method.name);
     let output: TokenStream = method
         .output_type
         .parse()
@@ -173,8 +173,8 @@ fn gen_trait_assoc_type(method: &MethodDef) -> TokenStream {
 }
 
 fn gen_svc_struct(method: &MethodDef, service_name: &proc_macro2::Ident) -> TokenStream {
-    let svc_name = format_ident!("{}Svc", method.name.to_upper_camel_case());
-    let method_name = format_ident!("{}", method.name);
+    let svc_name = format_ident!("{}Svc", method.rust_name().to_upper_camel_case());
+    let method_name = format_ident!("{}", method.rust_name());
     let input: TokenStream = method
         .input_type
         .parse()
@@ -184,8 +184,8 @@ fn gen_svc_struct(method: &MethodDef, service_name: &proc_macro2::Ident) -> Toke
         .parse()
         .unwrap_or_else(|e| panic!("invalid output_type `{}`: {e}", method.output_type));
 
-    match (method.client_streaming, method.server_streaming) {
-        (false, false) => {
+    match method.streaming {
+        StreamingType::None => {
             quote! {
                 struct #svc_name<T: #service_name>(Arc<T>);
                 impl<T: #service_name> grpc_server::UnaryService<#input> for #svc_name<T> {
@@ -198,8 +198,8 @@ fn gen_svc_struct(method: &MethodDef, service_name: &proc_macro2::Ident) -> Toke
                 }
             }
         }
-        (false, true) => {
-            let stream_type = response_stream_ident(&method.proto_name);
+        StreamingType::Server => {
+            let stream_type = response_stream_ident(&method.name);
             quote! {
                 struct #svc_name<T: #service_name>(Arc<T>);
                 impl<T: #service_name> grpc_server::ServerStreamingService<#input> for #svc_name<T> {
@@ -213,7 +213,7 @@ fn gen_svc_struct(method: &MethodDef, service_name: &proc_macro2::Ident) -> Toke
                 }
             }
         }
-        (true, false) => {
+        StreamingType::Client => {
             quote! {
                 struct #svc_name<T: #service_name>(Arc<T>);
                 impl<T: #service_name> grpc_server::ClientStreamingService<#input> for #svc_name<T> {
@@ -226,8 +226,8 @@ fn gen_svc_struct(method: &MethodDef, service_name: &proc_macro2::Ident) -> Toke
                 }
             }
         }
-        (true, true) => {
-            let stream_type = response_stream_ident(&method.proto_name);
+        StreamingType::BiDi => {
+            let stream_type = response_stream_ident(&method.name);
             quote! {
                 struct #svc_name<T: #service_name>(Arc<T>);
                 impl<T: #service_name> grpc_server::StreamingService<#input> for #svc_name<T> {
@@ -246,7 +246,7 @@ fn gen_svc_struct(method: &MethodDef, service_name: &proc_macro2::Ident) -> Toke
 
 fn gen_dispatch_arm(method: &MethodDef, service_fqn: &str) -> TokenStream {
     let path = method.grpc_path(service_fqn);
-    let svc_name = format_ident!("{}Svc", method.name.to_upper_camel_case());
+    let svc_name = format_ident!("{}Svc", method.rust_name().to_upper_camel_case());
     let codec_path: TokenStream = method
         .codec_path
         .parse()
@@ -261,11 +261,11 @@ fn gen_dispatch_arm(method: &MethodDef, service_fqn: &str) -> TokenStream {
         .unwrap_or_else(|e| panic!("invalid output_type `{}`: {e}", method.output_type));
 
     // Codec type params: <Encode=output, Decode=input> (server encodes output, decodes input)
-    let grpc_method = match (method.client_streaming, method.server_streaming) {
-        (false, false) => quote! { grpc.unary(#svc_name(inner), req).await },
-        (false, true) => quote! { grpc.server_streaming(#svc_name(inner), req).await },
-        (true, false) => quote! { grpc.client_streaming(#svc_name(inner), req).await },
-        (true, true) => quote! { grpc.streaming(#svc_name(inner), req).await },
+    let grpc_method = match method.streaming {
+        StreamingType::None => quote! { grpc.unary(#svc_name(inner), req).await },
+        StreamingType::Server => quote! { grpc.server_streaming(#svc_name(inner), req).await },
+        StreamingType::Client => quote! { grpc.client_streaming(#svc_name(inner), req).await },
+        StreamingType::BiDi => quote! { grpc.streaming(#svc_name(inner), req).await },
     };
 
     quote! {
@@ -281,32 +281,29 @@ fn gen_dispatch_arm(method: &MethodDef, service_fqn: &str) -> TokenStream {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ir::{MethodDef, ServiceDef};
+    use crate::ir::{MethodDef, ServiceDef, StreamingType};
 
     fn sample_service() -> ServiceDef {
         ServiceDef {
             name: "Greeter".into(),
-            package: "helloworld".into(),
-            proto_name: "Greeter".into(),
+            package: Some("helloworld".into()),
             comments: vec![],
             methods: vec![
                 MethodDef {
-                    name: "say_hello".into(),
-                    proto_name: "SayHello".into(),
+                    name: "SayHello".into(),
+                    rust_name: Some("say_hello".into()),
                     input_type: "super::HelloRequest".into(),
                     output_type: "super::HelloReply".into(),
-                    client_streaming: false,
-                    server_streaming: false,
+                    streaming: StreamingType::None,
                     codec_path: "grpc_core::codec::prost_codec::ProstCodec".into(),
                     comments: vec![],
                 },
                 MethodDef {
-                    name: "say_hello_stream".into(),
-                    proto_name: "SayHelloStream".into(),
+                    name: "SayHelloStream".into(),
+                    rust_name: Some("say_hello_stream".into()),
                     input_type: "super::HelloRequest".into(),
                     output_type: "super::HelloReply".into(),
-                    client_streaming: false,
-                    server_streaming: true,
+                    streaming: StreamingType::Server,
                     codec_path: "grpc_core::codec::prost_codec::ProstCodec".into(),
                     comments: vec![],
                 },
@@ -460,47 +457,42 @@ mod tests {
     fn all_four_rpc_patterns_generate_correct_grpc_calls() {
         let svc = ServiceDef {
             name: "Svc".into(),
-            package: "pkg".into(),
-            proto_name: "Svc".into(),
+            package: Some("pkg".into()),
             comments: vec![],
             methods: vec![
                 MethodDef {
-                    name: "unary_m".into(),
-                    proto_name: "UnaryM".into(),
+                    name: "UnaryM".into(),
+                    rust_name: Some("unary_m".into()),
                     input_type: "super::Req".into(),
                     output_type: "super::Resp".into(),
-                    client_streaming: false,
-                    server_streaming: false,
+                    streaming: StreamingType::None,
                     codec_path: "Codec".into(),
                     comments: vec![],
                 },
                 MethodDef {
-                    name: "server_m".into(),
-                    proto_name: "ServerM".into(),
+                    name: "ServerM".into(),
+                    rust_name: Some("server_m".into()),
                     input_type: "super::Req".into(),
                     output_type: "super::Resp".into(),
-                    client_streaming: false,
-                    server_streaming: true,
+                    streaming: StreamingType::Server,
                     codec_path: "Codec".into(),
                     comments: vec![],
                 },
                 MethodDef {
-                    name: "client_m".into(),
-                    proto_name: "ClientM".into(),
+                    name: "ClientM".into(),
+                    rust_name: Some("client_m".into()),
                     input_type: "super::Req".into(),
                     output_type: "super::Resp".into(),
-                    client_streaming: true,
-                    server_streaming: false,
+                    streaming: StreamingType::Client,
                     codec_path: "Codec".into(),
                     comments: vec![],
                 },
                 MethodDef {
-                    name: "bidi_m".into(),
-                    proto_name: "BidiM".into(),
+                    name: "BiDiM".into(),
+                    rust_name: Some("bidi_m".into()),
                     input_type: "super::Req".into(),
                     output_type: "super::Resp".into(),
-                    client_streaming: true,
-                    server_streaming: true,
+                    streaming: StreamingType::BiDi,
                     codec_path: "Codec".into(),
                     comments: vec![],
                 },

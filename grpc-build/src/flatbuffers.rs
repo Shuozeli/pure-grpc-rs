@@ -47,14 +47,17 @@ pub fn compile_fbs_dart(
     let result = flatc_rs_compiler::compile(&input_files, &options)
         .map_err(|e| io::Error::other(format!("flatbuffers compilation failed: {e}")))?;
 
-    // Generate Dart client code for each service
-    for service in &result.schema.services {
-        let code =
-            grpc_codegen::flatbuffers::generate_dart_client(service, &result.schema, proto_path)
-                .map_err(|e| io::Error::other(format!("Dart client codegen failed: {e}")))?;
+    // Convert to SchemaDef using codegen-flatbuffers
+    let schema_def = codegen_flatbuffers::from_resolved_schema(&result.schema)
+        .map_err(|e| io::Error::other(format!("schema conversion failed: {e}")))?;
 
-        let out_file =
-            Path::new(&out_dir).join(format!("{}_client.dart", service.name.to_lowercase()));
+    // Generate Dart client code for all services in the schema
+    let code = grpc_codegen::flatbuffers::generate_dart_client(&schema_def, proto_path)
+        .map_err(|e| io::Error::other(format!("Dart client codegen failed: {e}")))?;
+
+    // Only write the file if there are services (code is non-empty)
+    if !code.is_empty() {
+        let out_file = Path::new(&out_dir).join("grpc_clients.dart");
         std::fs::write(&out_file, &code)?;
     }
 
@@ -263,8 +266,8 @@ rpc_service Greeter {
 
         compile_fbs_dart(&[fbs_dir.join("greeter.fbs")], &[&fbs_dir], "helloworld").unwrap();
 
-        let dart_file = tmp.path().join("greeter_client.dart");
-        assert!(dart_file.exists(), "should generate greeter_client.dart");
+        let dart_file = tmp.path().join("grpc_clients.dart");
+        assert!(dart_file.exists(), "should generate grpc_clients.dart");
 
         let code = std::fs::read_to_string(&dart_file).unwrap();
         assert!(

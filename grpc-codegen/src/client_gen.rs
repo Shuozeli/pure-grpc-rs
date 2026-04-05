@@ -1,4 +1,4 @@
-use crate::ir::{comments_to_doc_tokens, MethodDef, ServiceDef};
+use crate::ir::{comments_to_doc_tokens, MethodDef, ServiceDef, StreamingType};
 use heck::ToSnakeCase;
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
@@ -82,9 +82,9 @@ fn gen_connect_method(client_name: &proc_macro2::Ident) -> TokenStream {
 
 fn gen_rpc_method(method: &MethodDef, service_fqn: &str) -> TokenStream {
     let method_docs = comments_to_doc_tokens(&method.comments);
-    let name = format_ident!("{}", method.name);
+    let name = format_ident!("{}", method.rust_name());
     let path = method.grpc_path(service_fqn);
-    let proto_name = &method.proto_name;
+    let proto_name = method.name.as_str();
     let codec_path: TokenStream = method
         .codec_path
         .parse()
@@ -106,8 +106,8 @@ fn gen_rpc_method(method: &MethodDef, service_fqn: &str) -> TokenStream {
             ))?;
     };
 
-    match (method.client_streaming, method.server_streaming) {
-        (false, false) => {
+    match method.streaming {
+        StreamingType::None => {
             // Unary
             quote! {
                 #method_docs
@@ -125,7 +125,7 @@ fn gen_rpc_method(method: &MethodDef, service_fqn: &str) -> TokenStream {
                 }
             }
         }
-        (false, true) => {
+        StreamingType::Server => {
             // Server streaming
             quote! {
                 #method_docs
@@ -143,7 +143,7 @@ fn gen_rpc_method(method: &MethodDef, service_fqn: &str) -> TokenStream {
                 }
             }
         }
-        (true, false) => {
+        StreamingType::Client => {
             // Client streaming
             quote! {
                 #method_docs
@@ -161,7 +161,7 @@ fn gen_rpc_method(method: &MethodDef, service_fqn: &str) -> TokenStream {
                 }
             }
         }
-        (true, true) => {
+        StreamingType::BiDi => {
             // Bidi streaming
             quote! {
                 #method_docs
@@ -185,21 +185,19 @@ fn gen_rpc_method(method: &MethodDef, service_fqn: &str) -> TokenStream {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ir::{MethodDef, ServiceDef};
+    use crate::ir::{MethodDef, ServiceDef, StreamingType};
 
     fn sample_service() -> ServiceDef {
         ServiceDef {
             name: "Greeter".into(),
-            package: "helloworld".into(),
-            proto_name: "Greeter".into(),
+            package: Some("helloworld".into()),
             comments: vec![],
             methods: vec![MethodDef {
-                name: "say_hello".into(),
-                proto_name: "SayHello".into(),
+                name: "SayHello".into(),
+                rust_name: Some("say_hello".into()),
                 input_type: "super::HelloRequest".into(),
                 output_type: "super::HelloReply".into(),
-                client_streaming: false,
-                server_streaming: false,
+                streaming: StreamingType::None,
                 codec_path: "grpc_core::codec::prost_codec::ProstCodec".into(),
                 comments: vec![],
             }],
@@ -274,47 +272,42 @@ mod tests {
     fn all_four_rpc_patterns_generate_parseable_code() {
         let svc = ServiceDef {
             name: "TestSvc".into(),
-            package: "test".into(),
-            proto_name: "TestSvc".into(),
+            package: Some("test".into()),
             comments: vec![],
             methods: vec![
                 MethodDef {
-                    name: "unary".into(),
-                    proto_name: "Unary".into(),
+                    name: "Unary".into(),
+                    rust_name: Some("unary".into()),
                     input_type: "super::Req".into(),
                     output_type: "super::Resp".into(),
-                    client_streaming: false,
-                    server_streaming: false,
+                    streaming: StreamingType::None,
                     codec_path: "Codec".into(),
                     comments: vec![],
                 },
                 MethodDef {
-                    name: "server_stream".into(),
-                    proto_name: "ServerStream".into(),
+                    name: "ServerStream".into(),
+                    rust_name: Some("server_stream".into()),
                     input_type: "super::Req".into(),
                     output_type: "super::Resp".into(),
-                    client_streaming: false,
-                    server_streaming: true,
+                    streaming: StreamingType::Server,
                     codec_path: "Codec".into(),
                     comments: vec![],
                 },
                 MethodDef {
-                    name: "client_stream".into(),
-                    proto_name: "ClientStream".into(),
+                    name: "ClientStream".into(),
+                    rust_name: Some("client_stream".into()),
                     input_type: "super::Req".into(),
                     output_type: "super::Resp".into(),
-                    client_streaming: true,
-                    server_streaming: false,
+                    streaming: StreamingType::Client,
                     codec_path: "Codec".into(),
                     comments: vec![],
                 },
                 MethodDef {
-                    name: "bidi".into(),
-                    proto_name: "Bidi".into(),
+                    name: "BiDi".into(),
+                    rust_name: Some("bidi".into()),
                     input_type: "super::Req".into(),
                     output_type: "super::Resp".into(),
-                    client_streaming: true,
-                    server_streaming: true,
+                    streaming: StreamingType::BiDi,
                     codec_path: "Codec".into(),
                     comments: vec![],
                 },

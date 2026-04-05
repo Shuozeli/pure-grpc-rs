@@ -18,6 +18,7 @@ protobuf = [
 ]
 flatbuffers = [
     "grpc-codegen/flatbuffers",
+    "codegen-flatbuffers",
     "flatc-rs-compiler",
     "flatc-rs-codegen",
 ]
@@ -36,6 +37,7 @@ protoc-rs-schema = { git = "https://github.com/shuozeli/protobuf-rs.git", branch
 
 flatc-rs-compiler = { git = "https://github.com/shuozeli/flatbuffers-rs.git", branch = "main", optional = true }
 flatc-rs-codegen = { git = "https://github.com/shuozeli/flatbuffers-rs.git", branch = "main", optional = true }
+codegen-flatbuffers = { git = "https://github.com/Shuozeli/codegen-infra.git", branch = "master", optional = true }
 
 [dev-dependencies]
 tempfile = "3"

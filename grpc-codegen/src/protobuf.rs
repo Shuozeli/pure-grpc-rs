@@ -1,7 +1,6 @@
 //! Adapter from protobuf-rs schema types to grpc-codegen IR.
 
-use crate::ir::{MethodDef, ServiceDef};
-use heck::ToSnakeCase;
+use crate::ir::{MethodDef, ServiceDef, StreamingType};
 use protoc_rs_schema::{MethodDescriptorProto, ServiceDescriptorProto};
 
 /// Default codec path for prost-based codegen.
@@ -36,9 +35,8 @@ pub fn service_from_proto(
         .collect::<Result<Vec<_>, _>>()?;
 
     Ok(ServiceDef {
-        name: name.clone(),
-        package: package.to_string(),
-        proto_name: name,
+        name,
+        package: Some(package.to_string()),
         methods,
         comments: vec![],
     })
@@ -51,7 +49,6 @@ fn method_from_proto(proto: &MethodDescriptorProto, proto_path: &str) -> Result<
         .filter(|s| !s.is_empty())
         .ok_or("method descriptor is missing a name")?
         .to_string();
-    let name = proto_name.to_snake_case();
 
     let input_type = resolve_type(
         proto
@@ -70,13 +67,16 @@ fn method_from_proto(proto: &MethodDescriptorProto, proto_path: &str) -> Result<
         proto_path,
     );
 
+    let client_streaming = proto.client_streaming.unwrap_or(false);
+    let server_streaming = proto.server_streaming.unwrap_or(false);
+    let streaming = StreamingType::from((client_streaming, server_streaming));
+
     Ok(MethodDef {
-        name,
-        proto_name,
+        name: proto_name,
+        rust_name: None,
         input_type,
         output_type,
-        client_streaming: proto.client_streaming.unwrap_or(false),
-        server_streaming: proto.server_streaming.unwrap_or(false),
+        streaming,
         codec_path: DEFAULT_CODEC_PATH.to_string(),
         comments: vec![],
     })
@@ -149,20 +149,20 @@ mod tests {
         let svc = service_from_proto(&proto, "helloworld", "super").unwrap();
 
         assert_eq!(svc.name, "Greeter");
-        assert_eq!(svc.package, "helloworld");
+        assert_eq!(svc.package, Some("helloworld".into()));
         assert_eq!(svc.fully_qualified_name(), "helloworld.Greeter");
         assert_eq!(svc.methods.len(), 2);
 
         let m0 = &svc.methods[0];
-        assert_eq!(m0.name, "say_hello");
-        assert_eq!(m0.proto_name, "SayHello");
+        assert_eq!(m0.name, "SayHello");
+        assert_eq!(m0.rust_name(), "say_hello");
         assert_eq!(m0.input_type, "super::HelloRequest");
-        assert!(!m0.client_streaming);
-        assert!(!m0.server_streaming);
+        assert!(matches!(m0.streaming, StreamingType::None));
 
         let m1 = &svc.methods[1];
-        assert_eq!(m1.name, "say_hello_stream");
-        assert!(m1.server_streaming);
+        assert_eq!(m1.name, "SayHelloStream");
+        assert_eq!(m1.rust_name(), "say_hello_stream");
+        assert!(matches!(m1.streaming, StreamingType::Server));
     }
 
     #[test]

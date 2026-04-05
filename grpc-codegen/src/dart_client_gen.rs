@@ -3,8 +3,8 @@
 //! Produces a Dart `XxxClient` class that extends `grpc.Client` with
 //! one method per RPC. Uses FlatBuffers for serialization.
 
-use crate::ir::{MethodDef, ServiceDef};
-use heck::{ToSnakeCase, ToUpperCamelCase};
+use crate::ir::{MethodDef, ServiceDef, StreamingType};
+use heck::ToUpperCamelCase;
 use std::fmt::Write as FmtWrite;
 
 /// Generate Dart client code for a service definition.
@@ -54,11 +54,15 @@ pub fn generate(service: &ServiceDef, proto_path: &str) -> String {
     // Import the generated FlatBuffers types
     // service.package uses dots (e.g., "rterm_rterm.protocol") but Dart imports
     // use slashes (e.g., "rterm_rterm/protocol_generated.dart")
-    let package_import = if service.package.is_empty() {
-        format!("{proto_path}_generated.dart")
+    let package_import = if let Some(ref pkg) = service.package {
+        if pkg.is_empty() {
+            format!("{proto_path}_generated.dart")
+        } else {
+            let package_path = pkg.replace('.', "/");
+            format!("package:{}/{}_generated.dart", proto_path, package_path)
+        }
     } else {
-        let package_path = service.package.replace('.', "/");
-        format!("package:{}/{}_generated.dart", proto_path, package_path)
+        format!("{proto_path}_generated.dart")
     };
     writeln!(&mut output, "import '{package_import}';").unwrap();
     writeln!(&mut output).unwrap();
@@ -143,7 +147,7 @@ pub fn generate(service: &ServiceDef, proto_path: &str) -> String {
 }
 
 fn gen_dart_method(mut output: &mut String, method: &MethodDef, service_fqn: &str) {
-    let method_name_snake = method.name.to_snake_case();
+    let method_name_snake = method.rust_name();
     let grpc_path = method.grpc_path(service_fqn);
 
     // Method doc comments
@@ -171,20 +175,20 @@ fn gen_dart_method(mut output: &mut String, method: &MethodDef, service_fqn: &st
     writeln!(output).unwrap();
 
     // Generate the method
-    match (method.client_streaming, method.server_streaming) {
-        (false, false) => {
+    match method.streaming {
+        StreamingType::None => {
             // Unary RPC
             gen_unary_method(output, &input_type, &output_type, &method_name_snake);
         }
-        (false, true) => {
+        StreamingType::Server => {
             // Server streaming
             gen_server_streaming_method(output, &input_type, &output_type, &method_name_snake);
         }
-        (true, false) => {
+        StreamingType::Client => {
             // Client streaming
             gen_client_streaming_method(output, &input_type, &output_type, &method_name_snake);
         }
-        (true, true) => {
+        StreamingType::BiDi => {
             // Bidirectional streaming
             gen_bidi_streaming_method(output, &input_type, &output_type, &method_name_snake);
         }
@@ -349,21 +353,19 @@ fn extract_type_name(fully_qualified: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ir::{MethodDef, ServiceDef};
+    use crate::ir::{MethodDef, ServiceDef, StreamingType};
 
     fn sample_service() -> ServiceDef {
         ServiceDef {
             name: "Greeter".into(),
-            package: "helloworld".into(),
-            proto_name: "Greeter".into(),
+            package: Some("helloworld".into()),
             comments: vec!["A simple greeter service.".to_string()],
             methods: vec![MethodDef {
-                name: "say_hello".into(),
-                proto_name: "SayHello".into(),
+                name: "SayHello".into(),
+                rust_name: Some("say_hello".into()),
                 input_type: "super::HelloRequest".into(),
                 output_type: "super::HelloReply".into(),
-                client_streaming: false,
-                server_streaming: false,
+                streaming: StreamingType::None,
                 codec_path: "grpc_codec_flatbuffers::FlatBuffersCodec".into(),
                 comments: vec!["Sends a greeting.".to_string()],
             }],
@@ -385,47 +387,42 @@ mod tests {
     fn generates_all_rpc_patterns() {
         let svc = ServiceDef {
             name: "TestSvc".into(),
-            package: "test".into(),
-            proto_name: "TestSvc".into(),
+            package: Some("test".into()),
             comments: vec![],
             methods: vec![
                 MethodDef {
-                    name: "unary".into(),
-                    proto_name: "Unary".into(),
+                    name: "Unary".into(),
+                    rust_name: Some("unary".into()),
                     input_type: "super::Req".into(),
                     output_type: "super::Resp".into(),
-                    client_streaming: false,
-                    server_streaming: false,
+                    streaming: StreamingType::None,
                     codec_path: "Codec".into(),
                     comments: vec![],
                 },
                 MethodDef {
-                    name: "server_stream".into(),
-                    proto_name: "ServerStream".into(),
+                    name: "ServerStream".into(),
+                    rust_name: Some("server_stream".into()),
                     input_type: "super::Req".into(),
                     output_type: "super::Resp".into(),
-                    client_streaming: false,
-                    server_streaming: true,
+                    streaming: StreamingType::Server,
                     codec_path: "Codec".into(),
                     comments: vec![],
                 },
                 MethodDef {
-                    name: "client_stream".into(),
-                    proto_name: "ClientStream".into(),
+                    name: "ClientStream".into(),
+                    rust_name: Some("client_stream".into()),
                     input_type: "super::Req".into(),
                     output_type: "super::Resp".into(),
-                    client_streaming: true,
-                    server_streaming: false,
+                    streaming: StreamingType::Client,
                     codec_path: "Codec".into(),
                     comments: vec![],
                 },
                 MethodDef {
-                    name: "bidi".into(),
-                    proto_name: "Bidi".into(),
+                    name: "BiDi".into(),
+                    rust_name: Some("bidi".into()),
                     input_type: "super::Req".into(),
                     output_type: "super::Resp".into(),
-                    client_streaming: true,
-                    server_streaming: true,
+                    streaming: StreamingType::BiDi,
                     codec_path: "Codec".into(),
                     comments: vec![],
                 },
@@ -466,17 +463,15 @@ mod tests {
     fn proto_path_dot_produces_valid_dart_types() {
         let svc = ServiceDef {
             name: "Terminal".into(),
-            package: "rterm.protocol".into(),
-            proto_name: "TerminalService".into(),
+            package: Some("rterm.protocol".into()),
             comments: vec![],
             methods: vec![MethodDef {
-                name: "session".into(),
-                proto_name: "Session".into(),
+                name: "Session".into(),
+                rust_name: Some("session".into()),
                 // Simulates what flatbuffers.rs produces with proto_path="."
                 input_type: ".::ClientMessage".into(),
                 output_type: ".::ServerMessage".into(),
-                client_streaming: true,
-                server_streaming: true,
+                streaming: StreamingType::BiDi,
                 codec_path: "Codec".into(),
                 comments: vec![],
             }],
