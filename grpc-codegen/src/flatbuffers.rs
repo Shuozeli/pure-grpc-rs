@@ -19,7 +19,7 @@ pub fn generate_dart_client(
     // For Dart, we generate client code for all services in the schema
     let mut output = String::new();
     for svc in &schema.services {
-        let svc_def: ServiceDef = svc.clone().into();
+        let svc_def: ServiceDef = svc.clone();
         output.push_str(&dart_client_gen::generate(&svc_def, proto_path));
     }
     Ok(output)
@@ -36,7 +36,7 @@ pub fn generate_service_tokens(
     let mut client_tokens = proc_macro2::TokenStream::new();
 
     for svc in &schema.services {
-        let svc_def: ServiceDef = svc.clone().into();
+        let svc_def: ServiceDef = svc.clone();
         server_tokens.extend(crate::server_gen::generate(&svc_def));
         client_tokens.extend(crate::client_gen::generate(&svc_def));
     }

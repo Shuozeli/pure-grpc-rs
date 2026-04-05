@@ -342,8 +342,8 @@ fn extract_type_name(fully_qualified: &str) -> String {
     // Handle proto_path="." case: flatbuffers.rs formats as ".::TypeName",
     // then .replace("::", ".") produces "..TypeName" (invalid).
     // Strip the leading ".:" to get just "TypeName".
-    if fully_qualified.starts_with(".::") {
-        return fully_qualified[3..].to_string();
+    if let Some(stripped) = fully_qualified.strip_prefix(".::") {
+        return stripped.to_string();
     }
     // Convert Rust's "::" separator to Dart's "." separator
     // e.g., "super::HelloRequest" -> "super.HelloRequest"
