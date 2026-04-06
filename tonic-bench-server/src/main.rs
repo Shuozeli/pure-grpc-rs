@@ -7,9 +7,9 @@ use std::pin::Pin;
 
 use clap::Parser;
 use futures::stream::StreamExt;
-use tonic::{Request, Response, Status};
-use tonic::async_trait;
 use tokio_stream::Stream;
+use tonic::async_trait;
+use tonic::{Request, Response, Status};
 
 const STREAM_COUNT: usize = 1000;
 
@@ -22,8 +22,10 @@ struct BenchmarkServiceImpl;
 
 #[tonic::async_trait]
 impl benchmark_service::benchmark_service_server::BenchmarkService for BenchmarkServiceImpl {
-    type ServerStreamStream = Pin<Box<dyn Stream<Item = Result<benchmark_service::BenchmarkResponse, Status>> + Send>>;
-    type BiDiStreamStream = Pin<Box<dyn Stream<Item = Result<benchmark_service::BenchmarkResponse, Status>> + Send>>;
+    type ServerStreamStream =
+        Pin<Box<dyn Stream<Item = Result<benchmark_service::BenchmarkResponse, Status>> + Send>>;
+    type BiDiStreamStream =
+        Pin<Box<dyn Stream<Item = Result<benchmark_service::BenchmarkResponse, Status>> + Send>>;
 
     async fn unary_call(
         &self,
@@ -108,9 +110,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("Tonic server listening on {}", addr);
 
     tonic::transport::Server::builder()
-        .add_service(benchmark_service::benchmark_service_server::BenchmarkServiceServer::new(
-            BenchmarkServiceImpl,
-        ))
+        .add_service(
+            benchmark_service::benchmark_service_server::BenchmarkServiceServer::new(
+                BenchmarkServiceImpl,
+            ),
+        )
         .serve(addr)
         .await?;
 

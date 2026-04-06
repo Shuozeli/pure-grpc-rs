@@ -464,7 +464,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!();
     println!("This load test requires running servers separately:");
     println!("  1. FlatBuffers server on port {}", args.flatbuffers_port);
-    println!("  2. Protobuf (pure-grpc) server on port {}", args.protobuf_port);
+    println!(
+        "  2. Protobuf (pure-grpc) server on port {}",
+        args.protobuf_port
+    );
     println!();
     println!("For tonic comparison, run tonic server:");
     println!("  cargo run --release -p tonic-bench-server --bin tonic_server");
