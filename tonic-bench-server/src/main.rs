@@ -8,7 +8,6 @@ use std::pin::Pin;
 use clap::Parser;
 use futures::stream::StreamExt;
 use tokio_stream::Stream;
-use tonic::async_trait;
 use tonic::{Request, Response, Status};
 
 const STREAM_COUNT: usize = 1000;
@@ -45,6 +44,7 @@ impl benchmark_service::benchmark_service_server::BenchmarkService for Benchmark
     ) -> Result<Response<Self::ServerStreamStream>, Status> {
         let req = request.into_inner();
 
+        #[allow(clippy::result_large_err)]
         let stream = tokio_stream::iter(0..STREAM_COUNT).map(move |i| {
             Ok(benchmark_service::BenchmarkResponse {
                 id: req.id + i as u64,
@@ -84,6 +84,8 @@ impl benchmark_service::benchmark_service_server::BenchmarkService for Benchmark
         request: Request<tonic::Streaming<benchmark_service::BenchmarkRequest>>,
     ) -> Result<Response<Self::BiDiStreamStream>, Status> {
         let stream = request.into_inner();
+
+        #[allow(clippy::result_large_err)]
         let stream = stream.map(|result| {
             result.map(|req| benchmark_service::BenchmarkResponse {
                 id: req.id,
