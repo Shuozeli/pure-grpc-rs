@@ -28,6 +28,7 @@ http-body-util = "0.1"
 # Async runtime for load test
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
+tokio-stream = "0.1"
 
 # CLI args
 clap = { version = "4", features = ["derive"] }

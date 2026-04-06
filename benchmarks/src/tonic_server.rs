@@ -15,17 +15,18 @@ use proto::benchmark_service_server::BenchmarkService;
 pub struct TonicServer;
 
 impl TonicServer {
-    pub async fn serve(config: BenchmarkConfig) -> Result<(), Box<dyn std::error::Error>> {
-        let addr = "127.0.0.1:50051".parse()?;
+    pub async fn serve(config: BenchmarkConfig) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let addr = "127.0.0.1:50053".parse()?;
+        let svc = TonicBenchmarkService::new(config);
+
         println!("Tonic server listening on {}", addr);
 
-        let listener = tokio::net::TcpListener::bind(addr).await?;
-        loop {
-            let (socket, _) = listener.accept().await?;
-            let svc = TonicBenchmarkService::new(config.clone());
-            let _ = socket;
-            // In real benchmark, we'd spawn this
-        }
+        tonic::transport::Server::builder()
+            .add_service(proto::benchmark_service_server::BenchmarkServiceServer::new(svc))
+            .serve(addr)
+            .await?;
+
+        Ok(())
     }
 }
 

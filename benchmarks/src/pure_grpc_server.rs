@@ -12,7 +12,7 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 
 pub mod fbs {
-    include!(concat!(env!("OUT_DIR"), "/benchmark_fbs.rs"));
+    include!(concat!(env!("OUT_DIR"), "/benchmark_generated.rs"));
 }
 
 pub struct PureGrpcServer {

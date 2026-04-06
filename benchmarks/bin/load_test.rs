@@ -10,6 +10,7 @@
 //!   --payload <bytes>     Payload size in bytes (default: 1024)
 //!   --flatbuffers-port    Port for FlatBuffers server (default: 50051)
 //!   --protobuf-port       Port for Protobuf server (default: 50052)
+//!   --tonic-port          Port for tonic server (default: 50053)
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -92,6 +93,13 @@ pub struct ProtobufBenchmarkResponse {
     #[prost(uint64, repeated, tag = "3")]
     pub numbers: Vec<u64>,
 }
+
+// ============================================================================
+// Tonic Client (for calling tonic servers)
+// ============================================================================
+// NOTE: Tonic client requires the proto to be compiled with tonic-build,
+// which conflicts with grpc_build used in this crate. For tonic benchmarks,
+// use the tonic-bench-server and a separate tonic client binary.
 
 // ============================================================================
 // FlatBuffers Client
@@ -454,9 +462,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("  Concurrency: {}", config.concurrency);
     println!("  Payload size: {} bytes", config.payload_size);
     println!();
-    println!("This load test requires running both servers separately:");
+    println!("This load test requires running servers separately:");
     println!("  1. FlatBuffers server on port {}", args.flatbuffers_port);
-    println!("  2. Protobuf server on port {}", args.protobuf_port);
+    println!("  2. Protobuf (pure-grpc) server on port {}", args.protobuf_port);
+    println!();
+    println!("For tonic comparison, run tonic server:");
+    println!("  cargo run --release -p tonic-bench-server --bin tonic_server");
 
     // Run FlatBuffers load test if server is available
     println!("\n--- FlatBuffers (pure-grpc) Load Test ---");
@@ -483,8 +494,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Ok(Err(e)) => println!("Protobuf load test failed: {}", e),
         Err(_) => println!("Protobuf load test timed out (server not running?)"),
     }
-
-    println!("\nNote: For a fair comparison with tonic, run this against tonic servers");
 
     Ok(())
 }

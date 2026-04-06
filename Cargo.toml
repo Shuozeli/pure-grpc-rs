@@ -15,6 +15,7 @@ members = [
     "examples/greeter-fbs",
     "examples/webtransport-echo",
     "benchmarks",
+    "tonic-bench-server",
 ]
 # vendor/tonic is NOT in the workspace — reference only
 exclude = ["vendor"]
