@@ -45,6 +45,7 @@ pub fn generate(service: &ServiceDef) -> TokenStream {
     let dispatch_arms = service.methods.iter().map(|m| gen_dispatch_arm(m, &fqn));
 
     quote! {
+        #[allow(unused_imports)]
         pub mod #mod_name {
             use std::convert::Infallible;
             use std::future::Future;

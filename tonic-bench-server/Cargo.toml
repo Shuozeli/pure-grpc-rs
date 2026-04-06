@@ -7,6 +7,10 @@ edition = "2021"
 name = "tonic_server"
 path = "src/main.rs"
 
+[[bin]]
+name = "tonic_todo_server"
+path = "src/todo_main.rs"
+
 [dependencies]
 tonic = { version = "0.12", features = ["prost"] }
 prost = "0.13"
@@ -15,6 +19,7 @@ tokio-stream = "0.1"
 clap = { version = "4", features = ["derive"] }
 futures = "0.3"
 http-body = "1"
+uuid = { version = "1", features = ["v4"] }
 
 [build-dependencies]
 tonic-build = "0.12"

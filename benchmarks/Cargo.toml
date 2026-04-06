@@ -19,6 +19,8 @@ grpc-server = { path = "../grpc-server" }
 grpc-client = { path = "../grpc-client" }
 flatbuffers = "25"
 bytes = "1"
+tower = "0.4"
+tower-service = "0.3"
 
 # HTTP types
 http = "1"
@@ -33,8 +35,12 @@ tokio-stream = "0.1"
 # CLI args
 clap = { version = "4", features = ["derive"] }
 
+# UUID for todo servers
+uuid = { version = "1", features = ["v4"] }
+
 [build-dependencies]
 grpc-build = { path = "../grpc-build", features = ["flatbuffers"] }
+tonic-build = "0.12"
 
 [[bench]]
 name = "grpc"
@@ -43,3 +49,15 @@ harness = false
 [[bin]]
 name = "load_test"
 path = "bin/load_test.rs"
+
+[[bin]]
+name = "prost_todo_server"
+path = "bin/prost_todo_server.rs"
+
+[[bin]]
+name = "flatbuffers_todo_server"
+path = "bin/flatbuffers_todo_server.rs"
+
+[[bin]]
+name = "todo_load_test"
+path = "bin/todo_load_test.rs"

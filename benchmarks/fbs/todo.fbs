@@ -1,0 +1,47 @@
+namespace todo;
+
+table Todo {
+  id: string;
+  title: string;
+  description: string;
+  completed: bool;
+  created_at: int64;
+}
+
+table CreateTodoRequest {
+  title: string;
+  description: string;
+}
+
+table CreateTodoResponse {
+  todo: Todo;
+}
+
+table GetTodoRequest {
+  id: string;
+}
+
+table GetTodoResponse {
+  todo: Todo;
+}
+
+table ListTodosRequest {}
+
+table ListTodosResponse {
+  todos: [Todo];
+}
+
+table DeleteTodoRequest {
+  id: string;
+}
+
+table DeleteTodoResponse {}
+
+root_type ListTodosResponse;
+
+rpc_service TodoService {
+  CreateTodo(CreateTodoRequest): CreateTodoResponse;
+  GetTodo(GetTodoRequest): GetTodoResponse;
+  ListTodos(ListTodosRequest): ListTodosResponse;
+  DeleteTodo(DeleteTodoRequest): DeleteTodoResponse;
+}
