@@ -32,9 +32,15 @@ use grpc_core::request::IntoRequest;
 use grpc_core::{Response, Status};
 
 // Include generated FlatBuffers code from build.rs
-include!(concat!(env!("OUT_DIR"), "/benchmark_generated.rs"));
+// The generated code has snake_case warnings we need to suppress
+#[allow(clippy::all)]
+#[allow(non_snake_case)]
+#[allow(dead_code)]
+mod generated_flatbuffers {
+    include!(concat!(env!("OUT_DIR"), "/benchmark_generated.rs"));
+}
 
-use benchmark::{
+use generated_flatbuffers::benchmark::{
     BenchmarkRequest as FbsRequest, BenchmarkRequestT, BenchmarkResponse as FbsResponse,
     BenchmarkResponseT,
 };
