@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package benchmark;
+
+message BenchmarkRequest {
+  uint64 id = 1;
+  string payload = 2;
+  repeated uint64 numbers = 3;
+}
+
+message BenchmarkResponse {
+  uint64 id = 1;
+  string payload = 2;
+  repeated uint64 numbers = 3;
+}
+
+service BenchmarkService {
+  rpc UnaryCall(BenchmarkRequest) returns (BenchmarkResponse);
+  rpc ServerStream(BenchmarkRequest) returns (stream BenchmarkResponse);
+  rpc ClientStream(stream BenchmarkRequest) returns (BenchmarkResponse);
+  rpc BiDiStream(stream BenchmarkRequest) returns (stream BenchmarkResponse);
+}

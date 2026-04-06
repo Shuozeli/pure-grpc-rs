@@ -1,0 +1,13 @@
+namespace benchmark;
+
+table BenchmarkRequest {
+  id: ulong;
+  payload: string;
+  numbers: [ulong];
+}
+
+table BenchmarkResponse {
+  id: ulong;
+  payload: string;
+  numbers: [ulong];
+}
