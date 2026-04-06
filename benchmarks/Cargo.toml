@@ -7,14 +7,30 @@ edition = "2021"
 # Bench
 criterion = { version = "0.5", features = ["html_reports"] }
 
-# Tonic + Protobuf
+# Tonic + Protobuf (for load test)
 prost = "0.13"
+tonic = { version = "0.12", features = ["prost"] }
 
 # pure-grpc-rs crates (for flatbuffers benchmarks)
 grpc-build = { path = "../grpc-build" }
 grpc-codec-flatbuffers = { path = "../grpc-codec-flatbuffers" }
 grpc-core = { path = "../grpc-core" }
+grpc-server = { path = "../grpc-server" }
+grpc-client = { path = "../grpc-client" }
 flatbuffers = "25"
+bytes = "1"
+
+# HTTP types
+http = "1"
+http-body = "1"
+http-body-util = "0.1"
+
+# Async runtime for load test
+tokio = { version = "1", features = ["full"] }
+futures = "0.3"
+
+# CLI args
+clap = { version = "4", features = ["derive"] }
 
 [build-dependencies]
 grpc-build = { path = "../grpc-build", features = ["flatbuffers"] }
@@ -22,3 +38,7 @@ grpc-build = { path = "../grpc-build", features = ["flatbuffers"] }
 [[bench]]
 name = "grpc"
 harness = false
+
+[[bin]]
+name = "load_test"
+path = "bin/load_test.rs"
