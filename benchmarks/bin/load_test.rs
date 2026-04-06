@@ -14,18 +14,13 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use bytes::{Buf, BufMut};
-use futures::stream::{self, StreamExt};
 use http::uri::PathAndQuery;
-use http_body::Body as HttpBody;
-use http_body_util::Empty;
 use prost::Message;
 use tokio::sync::{mpsc, Barrier};
 use tokio::time::timeout;
 
-use grpc_client::{Channel, Grpc, GrpcService};
+use grpc_client::{Channel, Grpc};
 use grpc_codec_flatbuffers::{FlatBufferGrpcMessage, FlatBuffersCodec};
-use grpc_core::body::Body;
 use grpc_core::codec::prost_codec::ProstCodec;
 use grpc_core::extensions::GrpcMethod;
 use grpc_core::request::IntoRequest;
@@ -227,7 +222,6 @@ async fn run_flatbuffers_load_test(
     // Run load test
     let barrier = Arc::new(Barrier::new(config.concurrency as usize));
     let start = Instant::now();
-    let mut total_requests: u64 = 0;
     let mut success_requests: u64 = 0;
     let mut latencies: Vec<u64> = Vec::new();
     let (tx, mut rx) = mpsc::channel::<(u64, Vec<u64>)>((config.concurrency * 2) as usize);
@@ -259,7 +253,6 @@ async fn run_flatbuffers_load_test(
                         local_success += 1;
                         local_latencies.push(req_start.elapsed().as_nanos() as u64);
                     }
-                    total_requests += 1;
                 }
 
                 let _ = tx.send((local_success, local_latencies)).await;
@@ -281,13 +274,13 @@ async fn run_flatbuffers_load_test(
     latencies.sort();
 
     let qps = if elapsed > 0.0 {
-        total_requests as f64 / elapsed
+        success_requests as f64 / elapsed
     } else {
         0.0
     };
 
     Ok(LoadTestResult {
-        total_requests,
+        total_requests: success_requests,
         success_requests,
         qps,
         p50_ns: percentile(&latencies, 0.50),
@@ -312,7 +305,6 @@ async fn run_protobuf_load_test(
     // Run load test
     let barrier = Arc::new(Barrier::new(config.concurrency as usize));
     let start = Instant::now();
-    let mut total_requests: u64 = 0;
     let mut success_requests: u64 = 0;
     let mut latencies: Vec<u64> = Vec::new();
     let (tx, mut rx) = mpsc::channel::<(u64, Vec<u64>)>((config.concurrency * 2) as usize);
@@ -344,7 +336,6 @@ async fn run_protobuf_load_test(
                         local_success += 1;
                         local_latencies.push(req_start.elapsed().as_nanos() as u64);
                     }
-                    total_requests += 1;
                 }
 
                 let _ = tx.send((local_success, local_latencies)).await;
@@ -366,13 +357,13 @@ async fn run_protobuf_load_test(
     latencies.sort();
 
     let qps = if elapsed > 0.0 {
-        total_requests as f64 / elapsed
+        success_requests as f64 / elapsed
     } else {
         0.0
     };
 
     Ok(LoadTestResult {
-        total_requests,
+        total_requests: success_requests,
         success_requests,
         qps,
         p50_ns: percentile(&latencies, 0.50),
