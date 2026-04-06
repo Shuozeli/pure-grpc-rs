@@ -23,18 +23,21 @@ use prost::Message;
 use tokio::sync::{mpsc, Barrier};
 use tokio::time::timeout;
 
-use grpc_codec_flatbuffers::{FlatBufferGrpcMessage, FlatBuffersCodec};
 use grpc_client::{Channel, Grpc, GrpcService};
+use grpc_codec_flatbuffers::{FlatBufferGrpcMessage, FlatBuffersCodec};
 use grpc_core::body::Body;
 use grpc_core::codec::prost_codec::ProstCodec;
 use grpc_core::extensions::GrpcMethod;
 use grpc_core::request::IntoRequest;
-use grpc_core::{Status, Response};
+use grpc_core::{Response, Status};
 
 // Include generated FlatBuffers code from build.rs
 include!(concat!(env!("OUT_DIR"), "/benchmark_generated.rs"));
 
-use benchmark::{BenchmarkRequest as FbsRequest, BenchmarkRequestT, BenchmarkResponse as FbsResponse, BenchmarkResponseT};
+use benchmark::{
+    BenchmarkRequest as FbsRequest, BenchmarkRequestT, BenchmarkResponse as FbsResponse,
+    BenchmarkResponseT,
+};
 
 // Implement FlatBufferGrpcMessage for generated types
 impl FlatBufferGrpcMessage for BenchmarkRequestT {
@@ -116,7 +119,10 @@ impl FlatBuffersClient {
         req.extensions_mut()
             .insert(GrpcMethod::new("benchmark.BenchmarkService", "UnaryCall"));
 
-        self.grpc.ready().await.map_err(|e| Status::unknown(format!("Service was not ready: {}", e)))?;
+        self.grpc
+            .ready()
+            .await
+            .map_err(|e| Status::unknown(format!("Service was not ready: {}", e)))?;
         self.grpc.unary(req, path, codec).await
     }
 }
@@ -148,7 +154,10 @@ impl ProtobufClient {
         req.extensions_mut()
             .insert(GrpcMethod::new("benchmark.BenchmarkService", "UnaryCall"));
 
-        self.grpc.ready().await.map_err(|e| Status::unknown(format!("Service was not ready: {}", e)))?;
+        self.grpc
+            .ready()
+            .await
+            .map_err(|e| Status::unknown(format!("Service was not ready: {}", e)))?;
         self.grpc.unary(req, path, codec).await
     }
 }
@@ -240,12 +249,9 @@ async fn run_flatbuffers_load_test(
                     let req = create_flatbuffers_request(id as u64, payload_size);
                     let req_start = Instant::now();
 
-                    match client.unary_call(req).await {
-                        Ok(_) => {
-                            local_success += 1;
-                            local_latencies.push(req_start.elapsed().as_nanos() as u64);
-                        }
-                        Err(_) => {}
+                    if client.unary_call(req).await.is_ok() {
+                        local_success += 1;
+                        local_latencies.push(req_start.elapsed().as_nanos() as u64);
                     }
                     total_requests += 1;
                 }
@@ -268,7 +274,11 @@ async fn run_flatbuffers_load_test(
     let elapsed = start.elapsed().as_secs_f64();
     latencies.sort();
 
-    let qps = if elapsed > 0.0 { total_requests as f64 / elapsed } else { 0.0 };
+    let qps = if elapsed > 0.0 {
+        total_requests as f64 / elapsed
+    } else {
+        0.0
+    };
 
     Ok(LoadTestResult {
         total_requests,
@@ -324,12 +334,9 @@ async fn run_protobuf_load_test(
                     let req = create_protobuf_request(id as u64, payload_size);
                     let req_start = Instant::now();
 
-                    match client.unary_call(req).await {
-                        Ok(_) => {
-                            local_success += 1;
-                            local_latencies.push(req_start.elapsed().as_nanos() as u64);
-                        }
-                        Err(_) => {}
+                    if client.unary_call(req).await.is_ok() {
+                        local_success += 1;
+                        local_latencies.push(req_start.elapsed().as_nanos() as u64);
                     }
                     total_requests += 1;
                 }
@@ -352,7 +359,11 @@ async fn run_protobuf_load_test(
     let elapsed = start.elapsed().as_secs_f64();
     latencies.sort();
 
-    let qps = if elapsed > 0.0 { total_requests as f64 / elapsed } else { 0.0 };
+    let qps = if elapsed > 0.0 {
+        total_requests as f64 / elapsed
+    } else {
+        0.0
+    };
 
     Ok(LoadTestResult {
         total_requests,
