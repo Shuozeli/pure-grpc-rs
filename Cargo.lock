@@ -222,6 +222,33 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
 
 [[package]]
+name = "codegen-core"
+version = "0.1.0"
+source = "git+https://github.com/Shuozeli/codegen-infra.git?branch=master#179882617ccbe8a3c956090b3261e3f50c10e651"
+dependencies = [
+ "thiserror",
+]
+
+[[package]]
+name = "codegen-flatbuffers"
+version = "0.1.0"
+source = "git+https://github.com/Shuozeli/codegen-infra.git?branch=master#179882617ccbe8a3c956090b3261e3f50c10e651"
+dependencies = [
+ "codegen-core",
+ "codegen-schema",
+ "flatc-rs-schema",
+ "thiserror",
+]
+
+[[package]]
+name = "codegen-schema"
+version = "0.1.0"
+source = "git+https://github.com/Shuozeli/codegen-infra.git?branch=master#179882617ccbe8a3c956090b3261e3f50c10e651"
+dependencies = [
+ "heck",
+]
+
+[[package]]
 name = "colorchoice"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -657,6 +684,7 @@ dependencies = [
 name = "grpc-build"
 version = "0.1.0"
 dependencies = [
+ "codegen-flatbuffers",
  "flatc-rs-codegen",
  "flatc-rs-compiler",
  "grpc-codegen",
@@ -710,13 +738,16 @@ dependencies = [
 name = "grpc-codegen"
 version = "0.1.0"
 dependencies = [
- "flatc-rs-schema",
+ "codegen-core",
+ "codegen-flatbuffers",
+ "codegen-schema",
  "heck",
  "prettyplease",
  "proc-macro2",
  "protoc-rs-schema",
  "quote",
  "syn",
+ "thiserror",
 ]
 
 [[package]]

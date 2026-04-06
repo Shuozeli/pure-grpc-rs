@@ -94,14 +94,15 @@ impl Router {
 
     fn route(&self, path: &str) -> Option<&Arc<dyn GrpcService>> {
         // Path format: /{service_name}/{method_name}
-        // Find the service by matching the prefix up to the second slash.
-        let path = path.strip_prefix('/').unwrap_or(path);
-        if let Some(slash_pos) = path.find('/') {
-            let service_key = format!("/{}", &path[..slash_pos]);
-            self.routes.get(&service_key)
-        } else {
-            None
+        // Find the service by checking if path starts with "/{service_name}/"
+        for (key, svc) in &self.routes {
+            if path.starts_with(key.as_str())
+                && path[key.len()..].starts_with('/')
+            {
+                return Some(svc);
+            }
         }
+        None
     }
 }
 
@@ -180,7 +181,7 @@ where
     }
 
     fn call(&mut self, req: Request<B>) -> Self::Future {
-        let path = req.uri().path().to_string();
+        let path = req.uri().path().to_owned();
         let (parts, body) = req.into_parts();
         let req = Request::from_parts(parts, Body::new(body));
 

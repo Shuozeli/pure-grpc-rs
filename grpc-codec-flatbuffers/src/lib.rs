@@ -100,9 +100,13 @@ impl<U: FlatBufferGrpcMessage> Decoder for FlatBuffersDecoder<U> {
 
     fn decode(&mut self, buf: &mut DecodeBuf<'_>) -> Result<Option<Self::Item>, Self::Error> {
         let len = buf.remaining();
-        let data = buf.copy_to_bytes(len);
-        let item = U::decode_flatbuffer(&data)
+        // Use chunk() to get a direct reference instead of copy_to_bytes which allocates.
+        // Safe because: FlatBuffers parsing is all-or-nothing, so if decode_flatbuffer
+        // succeeds, we've consumed all the bytes anyway.
+        let data = buf.chunk();
+        let item = U::decode_flatbuffer(data)
             .map_err(|e| Status::internal(format!("FlatBuffers decode error: {e}")))?;
+        buf.advance(len);
         Ok(Some(item))
     }
 
