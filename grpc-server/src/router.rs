@@ -96,9 +96,7 @@ impl Router {
         // Path format: /{service_name}/{method_name}
         // Find the service by checking if path starts with "/{service_name}/"
         for (key, svc) in &self.routes {
-            if path.starts_with(key.as_str())
-                && path[key.len()..].starts_with('/')
-            {
+            if path.starts_with(key.as_str()) && path[key.len()..].starts_with('/') {
                 return Some(svc);
             }
         }
