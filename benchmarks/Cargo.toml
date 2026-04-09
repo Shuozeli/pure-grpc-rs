@@ -61,3 +61,11 @@ path = "bin/flatbuffers_todo_server.rs"
 [[bin]]
 name = "todo_load_test"
 path = "bin/todo_load_test.rs"
+
+[[bin]]
+name = "prost_benchmark_server"
+path = "bin/prost_benchmark_server.rs"
+
+[[bin]]
+name = "streaming_load_test"
+path = "bin/streaming_load_test.rs"
