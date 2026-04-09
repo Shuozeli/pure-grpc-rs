@@ -29,24 +29,23 @@ mod todo_types {
 
 // Suppress derivable impls warning for hand-written Default impls
 #[allow(clippy::derivable_impls)]
-
 // Import FlatBuffers table types from generated code
 use generated::todo::{
-    Todo as FbsTodo, TodoArgs as FbsTodoArgs,
     CreateTodoRequest as FbsCreateTodoRequest, CreateTodoRequestArgs as FbsCreateTodoRequestArgs,
-    CreateTodoResponse as FbsCreateTodoResponse, CreateTodoResponseArgs as FbsCreateTodoResponseArgs,
-    GetTodoRequest as FbsGetTodoRequest, GetTodoRequestArgs as FbsGetTodoRequestArgs,
-    GetTodoResponse as FbsGetTodoResponse, GetTodoResponseArgs as FbsGetTodoResponseArgs,
-    ListTodosRequest as FbsListTodosRequest, ListTodosRequestArgs as FbsListTodosRequestArgs,
-    ListTodosResponse as FbsListTodosResponse, ListTodosResponseArgs as FbsListTodosResponseArgs,
-    DeleteTodoRequest as FbsDeleteTodoRequest, DeleteTodoRequestArgs as FbsDeleteTodoRequestArgs,
-    DeleteTodoResponse as FbsDeleteTodoResponse, DeleteTodoResponseArgs as FbsDeleteTodoResponseArgs,
+    CreateTodoResponse as FbsCreateTodoResponse,
+    CreateTodoResponseArgs as FbsCreateTodoResponseArgs, DeleteTodoRequest as FbsDeleteTodoRequest,
+    DeleteTodoRequestArgs as FbsDeleteTodoRequestArgs, DeleteTodoResponse as FbsDeleteTodoResponse,
+    DeleteTodoResponseArgs as FbsDeleteTodoResponseArgs, GetTodoRequest as FbsGetTodoRequest,
+    GetTodoRequestArgs as FbsGetTodoRequestArgs, GetTodoResponse as FbsGetTodoResponse,
+    GetTodoResponseArgs as FbsGetTodoResponseArgs, ListTodosRequest as FbsListTodosRequest,
+    ListTodosRequestArgs as FbsListTodosRequestArgs, ListTodosResponse as FbsListTodosResponse,
+    ListTodosResponseArgs as FbsListTodosResponseArgs, Todo as FbsTodo, TodoArgs as FbsTodoArgs,
 };
 
 use grpc_codec_flatbuffers::{FlatBufferGrpcMessage, FlatBuffersCodec};
-use grpc_server::{Grpc, NamedService, Router, Server, UnaryService};
-use grpc_core::{BoxFuture, Request, Response, Status};
 use grpc_core::body::Body;
+use grpc_core::{BoxFuture, Request, Response, Status};
+use grpc_server::{Grpc, NamedService, Router, Server, UnaryService};
 use std::convert::Infallible;
 use std::task::{Context, Poll};
 
@@ -94,8 +93,7 @@ impl FlatBufferGrpcMessage for TodoT {
     }
 
     fn decode_flatbuffer(data: &[u8]) -> Result<Self, String> {
-        let req = flatbuffers::root::<FbsTodo>(data)
-            .map_err(|e| format!("invalid Todo: {e}"))?;
+        let req = flatbuffers::root::<FbsTodo>(data).map_err(|e| format!("invalid Todo: {e}"))?;
         Ok(TodoT {
             id: req.id().map(|x| x.to_string()),
             title: req.title().map(|x| x.to_string()),
@@ -128,10 +126,7 @@ impl FlatBufferGrpcMessage for CreateTodoRequestT {
         let description = self.description.as_ref().map(|x| builder.create_string(x));
         let req = FbsCreateTodoRequest::create(
             &mut builder,
-            &FbsCreateTodoRequestArgs {
-                title,
-                description,
-            },
+            &FbsCreateTodoRequestArgs { title, description },
         );
         builder.finish(req, None);
         builder.finished_data().to_vec()
@@ -165,18 +160,18 @@ impl FlatBufferGrpcMessage for CreateTodoResponseT {
             let id = t.id.as_ref().map(|x| builder.create_string(x));
             let title = t.title.as_ref().map(|x| builder.create_string(x));
             let description = t.description.as_ref().map(|x| builder.create_string(x));
-            FbsTodo::create(&mut builder, &FbsTodoArgs {
-                id,
-                title,
-                description,
-                completed: t.completed,
-                created_at: t.created_at,
-            })
+            FbsTodo::create(
+                &mut builder,
+                &FbsTodoArgs {
+                    id,
+                    title,
+                    description,
+                    completed: t.completed,
+                    created_at: t.created_at,
+                },
+            )
         });
-        let resp = FbsCreateTodoResponse::create(
-            &mut builder,
-            &FbsCreateTodoResponseArgs { todo },
-        );
+        let resp = FbsCreateTodoResponse::create(&mut builder, &FbsCreateTodoResponseArgs { todo });
         builder.finish(resp, None);
         builder.finished_data().to_vec()
     }
@@ -211,10 +206,7 @@ impl FlatBufferGrpcMessage for GetTodoRequestT {
     fn encode_flatbuffer(&self) -> Vec<u8> {
         let mut builder = flatbuffers::FlatBufferBuilder::new();
         let id = self.id.as_ref().map(|x| builder.create_string(x));
-        let req = FbsGetTodoRequest::create(
-            &mut builder,
-            &FbsGetTodoRequestArgs { id },
-        );
+        let req = FbsGetTodoRequest::create(&mut builder, &FbsGetTodoRequestArgs { id });
         builder.finish(req, None);
         builder.finished_data().to_vec()
     }
@@ -246,18 +238,18 @@ impl FlatBufferGrpcMessage for GetTodoResponseT {
             let id = t.id.as_ref().map(|x| builder.create_string(x));
             let title = t.title.as_ref().map(|x| builder.create_string(x));
             let description = t.description.as_ref().map(|x| builder.create_string(x));
-            FbsTodo::create(&mut builder, &FbsTodoArgs {
-                id,
-                title,
-                description,
-                completed: t.completed,
-                created_at: t.created_at,
-            })
+            FbsTodo::create(
+                &mut builder,
+                &FbsTodoArgs {
+                    id,
+                    title,
+                    description,
+                    completed: t.completed,
+                    created_at: t.created_at,
+                },
+            )
         });
-        let resp = FbsGetTodoResponse::create(
-            &mut builder,
-            &FbsGetTodoResponseArgs { todo },
-        );
+        let resp = FbsGetTodoResponse::create(&mut builder, &FbsGetTodoResponseArgs { todo });
         builder.finish(resp, None);
         builder.finished_data().to_vec()
     }
@@ -283,10 +275,7 @@ pub struct ListTodosRequestT;
 impl FlatBufferGrpcMessage for ListTodosRequestT {
     fn encode_flatbuffer(&self) -> Vec<u8> {
         let mut builder = flatbuffers::FlatBufferBuilder::new();
-        let req = FbsListTodosRequest::create(
-            &mut builder,
-            &FbsListTodosRequestArgs {},
-        );
+        let req = FbsListTodosRequest::create(&mut builder, &FbsListTodosRequestArgs {});
         builder.finish(req, None);
         builder.finished_data().to_vec()
     }
@@ -310,18 +299,25 @@ impl Default for ListTodosResponseT {
 impl FlatBufferGrpcMessage for ListTodosResponseT {
     fn encode_flatbuffer(&self) -> Vec<u8> {
         let mut builder = flatbuffers::FlatBufferBuilder::new();
-        let todos = self.todos.iter().map(|t| {
-            let id = t.id.as_ref().map(|x| builder.create_string(x));
-            let title = t.title.as_ref().map(|x| builder.create_string(x));
-            let description = t.description.as_ref().map(|x| builder.create_string(x));
-            FbsTodo::create(&mut builder, &FbsTodoArgs {
-                id,
-                title,
-                description,
-                completed: t.completed,
-                created_at: t.created_at,
+        let todos = self
+            .todos
+            .iter()
+            .map(|t| {
+                let id = t.id.as_ref().map(|x| builder.create_string(x));
+                let title = t.title.as_ref().map(|x| builder.create_string(x));
+                let description = t.description.as_ref().map(|x| builder.create_string(x));
+                FbsTodo::create(
+                    &mut builder,
+                    &FbsTodoArgs {
+                        id,
+                        title,
+                        description,
+                        completed: t.completed,
+                        created_at: t.created_at,
+                    },
+                )
             })
-        }).collect::<Vec<_>>();
+            .collect::<Vec<_>>();
         let todos = builder.create_vector(&todos);
         let resp = FbsListTodosResponse::create(
             &mut builder,
@@ -334,13 +330,20 @@ impl FlatBufferGrpcMessage for ListTodosResponseT {
     fn decode_flatbuffer(data: &[u8]) -> Result<Self, String> {
         let resp = flatbuffers::root::<FbsListTodosResponse>(data)
             .map_err(|e| format!("invalid ListTodosResponse: {e}"))?;
-        let todos = resp.todos().map(|v| v.iter().map(|t| TodoT {
-            id: t.id().map(|x| x.to_string()),
-            title: t.title().map(|x| x.to_string()),
-            description: t.description().map(|x| x.to_string()),
-            completed: t.completed(),
-            created_at: t.created_at(),
-        }).collect()).unwrap_or_default();
+        let todos = resp
+            .todos()
+            .map(|v| {
+                v.iter()
+                    .map(|t| TodoT {
+                        id: t.id().map(|x| x.to_string()),
+                        title: t.title().map(|x| x.to_string()),
+                        description: t.description().map(|x| x.to_string()),
+                        completed: t.completed(),
+                        created_at: t.created_at(),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
         Ok(ListTodosResponseT { todos })
     }
 }
@@ -360,10 +363,7 @@ impl FlatBufferGrpcMessage for DeleteTodoRequestT {
     fn encode_flatbuffer(&self) -> Vec<u8> {
         let mut builder = flatbuffers::FlatBufferBuilder::new();
         let id = self.id.as_ref().map(|x| builder.create_string(x));
-        let req = FbsDeleteTodoRequest::create(
-            &mut builder,
-            &FbsDeleteTodoRequestArgs { id },
-        );
+        let req = FbsDeleteTodoRequest::create(&mut builder, &FbsDeleteTodoRequestArgs { id });
         builder.finish(req, None);
         builder.finished_data().to_vec()
     }
@@ -383,10 +383,7 @@ pub struct DeleteTodoResponseT;
 impl FlatBufferGrpcMessage for DeleteTodoResponseT {
     fn encode_flatbuffer(&self) -> Vec<u8> {
         let mut builder = flatbuffers::FlatBufferBuilder::new();
-        let resp = FbsDeleteTodoResponse::create(
-            &mut builder,
-            &FbsDeleteTodoResponseArgs {},
-        );
+        let resp = FbsDeleteTodoResponse::create(&mut builder, &FbsDeleteTodoResponseArgs {});
         builder.finish(resp, None);
         builder.finished_data().to_vec()
     }
@@ -481,7 +478,10 @@ impl TodoService for TodoServiceImpl {
 
         Box::pin(async move {
             let mut todos = todos.write().await;
-            if todos.remove(req.id.as_ref().unwrap_or(&String::new())).is_some() {
+            if todos
+                .remove(req.id.as_ref().unwrap_or(&String::new()))
+                .is_some()
+            {
                 Ok(Response::new(DeleteTodoResponseT))
             } else {
                 Err(Status::not_found("Todo not found"))
@@ -589,19 +589,25 @@ impl<T: TodoService> tower_service::Service<http::Request<Body>> for TodoService
         let inner = self.inner.clone();
         match req.uri().path() {
             "/todo.TodoService/CreateTodo" => Box::pin(async move {
-                let mut grpc = Grpc::new(FlatBuffersCodec::<CreateTodoResponseT, CreateTodoRequestT>::default());
+                let mut grpc = Grpc::new(
+                    FlatBuffersCodec::<CreateTodoResponseT, CreateTodoRequestT>::default(),
+                );
                 Ok(grpc.unary(CreateTodoSvc(inner), req).await)
             }),
             "/todo.TodoService/GetTodo" => Box::pin(async move {
-                let mut grpc = Grpc::new(FlatBuffersCodec::<GetTodoResponseT, GetTodoRequestT>::default());
+                let mut grpc =
+                    Grpc::new(FlatBuffersCodec::<GetTodoResponseT, GetTodoRequestT>::default());
                 Ok(grpc.unary(GetTodoSvc(inner), req).await)
             }),
             "/todo.TodoService/ListTodos" => Box::pin(async move {
-                let mut grpc = Grpc::new(FlatBuffersCodec::<ListTodosResponseT, ListTodosRequestT>::default());
+                let mut grpc =
+                    Grpc::new(FlatBuffersCodec::<ListTodosResponseT, ListTodosRequestT>::default());
                 Ok(grpc.unary(ListTodosSvc(inner), req).await)
             }),
             "/todo.TodoService/DeleteTodo" => Box::pin(async move {
-                let mut grpc = Grpc::new(FlatBuffersCodec::<DeleteTodoResponseT, DeleteTodoRequestT>::default());
+                let mut grpc = Grpc::new(
+                    FlatBuffersCodec::<DeleteTodoResponseT, DeleteTodoRequestT>::default(),
+                );
                 Ok(grpc.unary(DeleteTodoSvc(inner), req).await)
             }),
             _ => Box::pin(async move { Ok(Status::unimplemented("method not found").into_http()) }),
@@ -622,7 +628,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let todo_service = TodoServiceServer::new(TodoServiceImpl::new());
 
-    let router = Router::new().add_service(TodoServiceServer::<TodoServiceImpl>::NAME, todo_service);
+    let router =
+        Router::new().add_service(TodoServiceServer::<TodoServiceImpl>::NAME, todo_service);
 
     println!("Server listening on port {}", args.port);
 

@@ -19,8 +19,8 @@ mod generated {
 
 use generated::benchmark_service_server::{BenchmarkService, BenchmarkServiceServer};
 use generated::{BenchmarkRequest, BenchmarkResponse};
-use grpc_server::NamedService;
 use grpc_core::{Request, Response, Status, Streaming};
+use grpc_server::NamedService;
 
 const STREAM_COUNT: usize = 1000;
 
@@ -28,7 +28,8 @@ const STREAM_COUNT: usize = 1000;
 struct BenchmarkServiceImpl;
 
 impl BenchmarkService for BenchmarkServiceImpl {
-    type ServerResponseStream = Pin<Box<dyn Stream<Item = Result<BenchmarkResponse, Status>> + Send>>;
+    type ServerResponseStream =
+        Pin<Box<dyn Stream<Item = Result<BenchmarkResponse, Status>> + Send>>;
     type BiDiResponseStream = Pin<Box<dyn Stream<Item = Result<BenchmarkResponse, Status>> + Send>>;
 
     fn unary_call(
@@ -49,8 +50,12 @@ impl BenchmarkService for BenchmarkServiceImpl {
     fn server_stream(
         &self,
         request: Request<BenchmarkRequest>,
-    ) -> Pin<Box<dyn futures::Future<Output = Result<Response<Self::ServerResponseStream>, Status>> + Send>>
-    {
+    ) -> Pin<
+        Box<
+            dyn futures::Future<Output = Result<Response<Self::ServerResponseStream>, Status>>
+                + Send,
+        >,
+    > {
         let req = request.into_inner();
         let payload = req.payload.clone();
         let numbers = req.numbers.clone();
@@ -102,8 +107,11 @@ impl BenchmarkService for BenchmarkServiceImpl {
     fn bi_di_stream(
         &self,
         request: Request<Streaming<BenchmarkRequest>>,
-    ) -> Pin<Box<dyn futures::Future<Output = Result<Response<Self::BiDiResponseStream>, Status>> + Send>>
-    {
+    ) -> Pin<
+        Box<
+            dyn futures::Future<Output = Result<Response<Self::BiDiResponseStream>, Status>> + Send,
+        >,
+    > {
         let stream = request.into_inner();
 
         Box::pin(async move {
@@ -132,8 +140,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let benchmark_service = BenchmarkServiceServer::new(BenchmarkServiceImpl);
 
-    let router = grpc_server::Router::new()
-        .add_service(BenchmarkServiceServer::<BenchmarkServiceImpl>::NAME, benchmark_service);
+    let router = grpc_server::Router::new().add_service(
+        BenchmarkServiceServer::<BenchmarkServiceImpl>::NAME,
+        benchmark_service,
+    );
 
     println!("Prost Benchmark server listening on port {}", args.port);
 

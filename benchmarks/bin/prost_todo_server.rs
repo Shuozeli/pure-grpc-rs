@@ -22,8 +22,8 @@ use generated::{
     CreateTodoRequest, CreateTodoResponse, DeleteTodoRequest, DeleteTodoResponse, GetTodoRequest,
     GetTodoResponse, ListTodosRequest, ListTodosResponse, Todo,
 };
-use grpc_server::{NamedService, Router, Server};
 use grpc_core::{Request, Response, Status};
+use grpc_server::{NamedService, Router, Server};
 
 #[derive(Clone)]
 struct TodoServiceImpl {
@@ -130,7 +130,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let todo_service = TodoServiceServer::new(TodoServiceImpl::new());
 
-    let router = Router::new().add_service(TodoServiceServer::<TodoServiceImpl>::NAME, todo_service);
+    let router =
+        Router::new().add_service(TodoServiceServer::<TodoServiceImpl>::NAME, todo_service);
 
     println!("Server listening on port {}", args.port);
 

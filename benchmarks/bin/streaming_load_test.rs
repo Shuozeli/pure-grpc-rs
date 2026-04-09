@@ -88,7 +88,11 @@ impl BenchmarkRequest {
         let payload_len = size.size() - 24; // subtract id + numbers overhead
         let payload = "x".repeat(payload_len.max(1));
         let numbers = (0..BENCHMARK_NUMBERS_COUNT as u64).collect();
-        Self { id, payload, numbers }
+        Self {
+            id,
+            payload,
+            numbers,
+        }
     }
 }
 
@@ -127,7 +131,10 @@ impl TonicBenchmarkClient {
         let path = PathAndQuery::from_static("/benchmark.BenchmarkService/UnaryCall");
         let codec = TonicProstCodec::<BenchmarkRequest, BenchmarkResponse>::default();
 
-        self.grpc.ready().await.map_err(|e| tonic::Status::internal(e.to_string()))?;
+        self.grpc
+            .ready()
+            .await
+            .map_err(|e| tonic::Status::internal(e.to_string()))?;
         let _ = self.grpc.unary(request, path, codec).await?;
         Ok(())
     }
@@ -141,7 +148,10 @@ impl TonicBenchmarkClient {
         let path = PathAndQuery::from_static("/benchmark.BenchmarkService/ServerStream");
         let codec = TonicProstCodec::<BenchmarkRequest, BenchmarkResponse>::default();
 
-        self.grpc.ready().await.map_err(|e| tonic::Status::internal(e.to_string()))?;
+        self.grpc
+            .ready()
+            .await
+            .map_err(|e| tonic::Status::internal(e.to_string()))?;
         let response = self.grpc.server_streaming(request, path, codec).await?;
         let mut stream = response.into_inner();
         let mut responses = Vec::new();
@@ -159,10 +169,14 @@ impl TonicBenchmarkClient {
         let path = PathAndQuery::from_static("/benchmark.BenchmarkService/ClientStream");
         let codec = TonicProstCodec::<BenchmarkRequest, BenchmarkResponse>::default();
 
-        let stream = tokio_stream::iter((0..count as u64).map(move |i| BenchmarkRequest::new(i, size)));
+        let stream =
+            tokio_stream::iter((0..count as u64).map(move |i| BenchmarkRequest::new(i, size)));
         let request = tonic::Request::new(stream);
 
-        self.grpc.ready().await.map_err(|e| tonic::Status::internal(e.to_string()))?;
+        self.grpc
+            .ready()
+            .await
+            .map_err(|e| tonic::Status::internal(e.to_string()))?;
         let response = self.grpc.client_streaming(request, path, codec).await?;
         Ok(response.into_inner())
     }
@@ -175,10 +189,14 @@ impl TonicBenchmarkClient {
         let path = PathAndQuery::from_static("/benchmark.BenchmarkService/BiDiStream");
         let codec = TonicProstCodec::<BenchmarkRequest, BenchmarkResponse>::default();
 
-        let stream = tokio_stream::iter((0..count as u64).map(move |i| BenchmarkRequest::new(i, size)));
+        let stream =
+            tokio_stream::iter((0..count as u64).map(move |i| BenchmarkRequest::new(i, size)));
         let request = tonic::Request::new(stream);
 
-        self.grpc.ready().await.map_err(|e| tonic::Status::internal(e.to_string()))?;
+        self.grpc
+            .ready()
+            .await
+            .map_err(|e| tonic::Status::internal(e.to_string()))?;
         let response = self.grpc.streaming(request, path, codec).await?;
         let mut stream = response.into_inner();
         let mut responses = Vec::new();
@@ -211,9 +229,13 @@ impl ProstBenchmarkClient {
         let path = PathAndQuery::from_static("/benchmark.BenchmarkService/UnaryCall");
 
         let mut req = request.into_request();
-        req.extensions_mut().insert(GrpcMethod::new("benchmark.BenchmarkService", "UnaryCall"));
+        req.extensions_mut()
+            .insert(GrpcMethod::new("benchmark.BenchmarkService", "UnaryCall"));
 
-        self.grpc.ready().await.map_err(|e| Status::unknown(format!("Service was not ready: {}", e)))?;
+        self.grpc
+            .ready()
+            .await
+            .map_err(|e| Status::unknown(format!("Service was not ready: {}", e)))?;
         let _ = self.grpc.unary(req, path, codec).await?;
         Ok(())
     }
@@ -228,9 +250,15 @@ impl ProstBenchmarkClient {
         let path = PathAndQuery::from_static("/benchmark.BenchmarkService/ServerStream");
 
         let mut req = request.into_request();
-        req.extensions_mut().insert(GrpcMethod::new("benchmark.BenchmarkService", "ServerStream"));
+        req.extensions_mut().insert(GrpcMethod::new(
+            "benchmark.BenchmarkService",
+            "ServerStream",
+        ));
 
-        self.grpc.ready().await.map_err(|e| Status::unknown(format!("Service was not ready: {}", e)))?;
+        self.grpc
+            .ready()
+            .await
+            .map_err(|e| Status::unknown(format!("Service was not ready: {}", e)))?;
         let response: Response<grpc_core::Streaming<BenchmarkResponse>> =
             self.grpc.server_streaming(req, path, codec).await?;
         let mut stream = response.into_inner();
@@ -253,11 +281,18 @@ impl ProstBenchmarkClient {
         let codec = ProstCodec::<BenchmarkRequest, BenchmarkResponse>::default();
         let path = PathAndQuery::from_static("/benchmark.BenchmarkService/ClientStream");
 
-        let stream = tokio_stream::iter((0..count as u64).map(move |i| BenchmarkRequest::new(i, size)));
+        let stream =
+            tokio_stream::iter((0..count as u64).map(move |i| BenchmarkRequest::new(i, size)));
         let mut req = stream.into_streaming_request();
-        req.extensions_mut().insert(GrpcMethod::new("benchmark.BenchmarkService", "ClientStream"));
+        req.extensions_mut().insert(GrpcMethod::new(
+            "benchmark.BenchmarkService",
+            "ClientStream",
+        ));
 
-        self.grpc.ready().await.map_err(|e| Status::unknown(format!("Service was not ready: {}", e)))?;
+        self.grpc
+            .ready()
+            .await
+            .map_err(|e| Status::unknown(format!("Service was not ready: {}", e)))?;
         let response = self.grpc.client_streaming(req, path, codec).await?;
         Ok(response.into_inner())
     }
@@ -270,11 +305,16 @@ impl ProstBenchmarkClient {
         let codec = ProstCodec::<BenchmarkRequest, BenchmarkResponse>::default();
         let path = PathAndQuery::from_static("/benchmark.BenchmarkService/BiDiStream");
 
-        let stream = tokio_stream::iter((0..count as u64).map(move |i| BenchmarkRequest::new(i, size)));
+        let stream =
+            tokio_stream::iter((0..count as u64).map(move |i| BenchmarkRequest::new(i, size)));
         let mut req = stream.into_streaming_request();
-        req.extensions_mut().insert(GrpcMethod::new("benchmark.BenchmarkService", "BiDiStream"));
+        req.extensions_mut()
+            .insert(GrpcMethod::new("benchmark.BenchmarkService", "BiDiStream"));
 
-        self.grpc.ready().await.map_err(|e| Status::unknown(format!("Service was not ready: {}", e)))?;
+        self.grpc
+            .ready()
+            .await
+            .map_err(|e| Status::unknown(format!("Service was not ready: {}", e)))?;
         let response: Response<grpc_core::Streaming<BenchmarkResponse>> =
             self.grpc.streaming(req, path, codec).await?;
         let mut stream = response.into_inner();
@@ -923,15 +963,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!();
     println!("This load test requires running servers:");
     println!("  1. Prost (pure-grpc) server on port {}", args.prost_port);
-    println!("     cargo run --release -p benchmarks --bin prost_benchmark_server -- --port {}", args.prost_port);
+    println!(
+        "     cargo run --release -p benchmarks --bin prost_benchmark_server -- --port {}",
+        args.prost_port
+    );
     println!("  2. Tonic server on port {}", args.tonic_port);
-    println!("     cargo run --release -p tonic-bench-server --bin tonic_server -- --port {}", args.tonic_port);
+    println!(
+        "     cargo run --release -p tonic-bench-server --bin tonic_server -- --port {}",
+        args.tonic_port
+    );
     println!();
 
     let size = PayloadSize::Small;
 
     // === Unary Tests ===
-    println!("\n========== UNARY TESTS ({} payload) ==========", size.as_str());
+    println!(
+        "\n========== UNARY TESTS ({} payload) ==========",
+        size.as_str()
+    );
 
     println!("\n--- Tonic Unary ---");
     match timeout(
@@ -958,7 +1007,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
 
     // === Server Streaming Tests ===
-    println!("\n========== SERVER STREAMING TESTS ({} payload) ==========", size.as_str());
+    println!(
+        "\n========== SERVER STREAMING TESTS ({} payload) ==========",
+        size.as_str()
+    );
 
     println!("\n--- Tonic Server Stream ---");
     match timeout(
@@ -985,7 +1037,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
 
     // === Client Streaming Tests ===
-    println!("\n========== CLIENT STREAMING TESTS ({} payload, {} items) ==========", size.as_str(), config.stream_count);
+    println!(
+        "\n========== CLIENT STREAMING TESTS ({} payload, {} items) ==========",
+        size.as_str(),
+        config.stream_count
+    );
 
     println!("\n--- Tonic Client Stream ---");
     match timeout(
@@ -1012,7 +1068,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
 
     // === Bidirectional Streaming Tests ===
-    println!("\n========== BIDIRECTIONAL STREAMING TESTS ({} payload, {} items) ==========", size.as_str(), config.stream_count);
+    println!(
+        "\n========== BIDIRECTIONAL STREAMING TESTS ({} payload, {} items) ==========",
+        size.as_str(),
+        config.stream_count
+    );
 
     println!("\n--- Tonic BiDi Stream ---");
     match timeout(
