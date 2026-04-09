@@ -21,7 +21,7 @@ thiserror = "2"
 
 protoc-rs-schema = { git = "https://github.com/shuozeli/protobuf-rs.git", branch = "main", optional = true }
 codegen-schema = { git = "https://github.com/Shuozeli/codegen-infra.git", branch = "master" }
-codegen-flatbuffers = { git = "https://github.com/Shuozeli/codegen-infra.git", branch = "master", optional = true }
+codegen-flatbuffers = { git = "https://github.com/Shuozeli/flatbuffers-rs.git", branch = "main", optional = true }
 codegen-core = { git = "https://github.com/Shuozeli/codegen-infra.git", branch = "master" }
 
 [dev-dependencies]
