@@ -13,10 +13,9 @@ impl Greeter for TestGreeter {
         &self,
         request: Request<HelloRequest>,
     ) -> BoxFuture<Result<Response<HelloReply>, Status>> {
-        let name = request.into_inner().name;
-        let reply = HelloReply {
-            message: format!("Hello (FlatBuffers), {name}!"),
-        };
+        let name = request.into_inner().name.unwrap_or_default();
+        let mut reply = HelloReply::default();
+        reply.message = Some(format!("Hello (FlatBuffers), {name}!"));
         Box::pin(async move { Ok(Response::new(reply)) })
     }
 }
@@ -49,19 +48,23 @@ async fn start_server() -> SocketAddr {
     addr
 }
 
+fn make_request(name: &str) -> HelloRequest {
+    let mut req = HelloRequest::default();
+    req.name = Some(name.into());
+    req
+}
+
 #[tokio::test]
 async fn flatbuffers_unary_roundtrip() {
     let addr = start_server().await;
     let mut client = connect(addr).await;
 
-    let resp = client
-        .say_hello(HelloRequest {
-            name: "FBS-test".into(),
-        })
-        .await
-        .unwrap();
+    let resp = client.say_hello(make_request("FBS-test")).await.unwrap();
 
-    assert_eq!(resp.get_ref().message, "Hello (FlatBuffers), FBS-test!");
+    assert_eq!(
+        resp.get_ref().message.as_deref(),
+        Some("Hello (FlatBuffers), FBS-test!")
+    );
 }
 
 #[tokio::test]
@@ -73,9 +76,7 @@ async fn flatbuffers_unimplemented_method() {
 
     let codec = grpc_codec_flatbuffers::FlatBuffersCodec::<HelloRequest, HelloReply>::default();
     let path: http::uri::PathAndQuery = "/helloworld.Greeter/NonExistent".parse().unwrap();
-    let req = Request::new(HelloRequest {
-        name: "test".into(),
-    });
+    let req = Request::new(make_request("test"));
 
     let result = grpc.unary(req, path, codec).await;
     assert!(result.is_err());
@@ -87,16 +88,17 @@ async fn flatbuffers_metadata_roundtrip() {
     let addr = start_server().await;
     let mut client = connect(addr).await;
 
-    let mut req = Request::new(HelloRequest {
-        name: "meta-test".into(),
-    });
+    let mut req = Request::new(make_request("meta-test"));
     req.metadata_mut().insert(
         "x-custom-header",
         http::HeaderValue::from_static("custom-value"),
     );
 
     let resp = client.say_hello(req).await.unwrap();
-    assert_eq!(resp.get_ref().message, "Hello (FlatBuffers), meta-test!");
+    assert_eq!(
+        resp.get_ref().message.as_deref(),
+        Some("Hello (FlatBuffers), meta-test!")
+    );
 }
 
 #[tokio::test]
@@ -105,13 +107,10 @@ async fn flatbuffers_concurrent_requests() {
 
     let mut handles = Vec::new();
     for i in 0..5 {
-        let addr = addr;
         handles.push(tokio::spawn(async move {
             let mut client = connect(addr).await;
             let resp = client
-                .say_hello(HelloRequest {
-                    name: format!("client-{i}"),
-                })
+                .say_hello(make_request(&format!("client-{i}")))
                 .await
                 .unwrap();
             resp.get_ref().message.clone()
@@ -120,7 +119,7 @@ async fn flatbuffers_concurrent_requests() {
 
     for (i, handle) in handles.into_iter().enumerate() {
         let msg = handle.await.unwrap();
-        assert_eq!(msg, format!("Hello (FlatBuffers), client-{i}!"));
+        assert_eq!(msg, Some(format!("Hello (FlatBuffers), client-{i}!")));
     }
 }
 

@@ -66,9 +66,26 @@ pub fn compile_fbs_dart(
 
 /// Compile `.fbs` files into Rust FlatBuffers types + gRPC service stubs.
 ///
-/// Parses and analyzes the FlatBuffers schema using flatbuffers-rs, generates
-/// Rust readers/builders via flatc-rs-codegen (with gRPC stubs if services
-/// are defined). All output is written to `OUT_DIR`.
+/// Parses and analyzes the FlatBuffers schema using flatbuffers-rs, then runs
+/// two code generators:
+///
+/// 1. `flatc-rs-codegen` produces zero-copy readers, builders, and
+///    `gen_object_api` owned `*T` types for every table/struct/enum.
+///    The output goes to `<stem>_generated.rs`.
+///
+/// 2. `grpc_codegen::flatbuffers::generate_grpc_stubs` produces the
+///    user-facing gRPC layer: top-level type aliases (`pub use ... as ...`),
+///    [`grpc_codec_flatbuffers::FlatBufferGrpcMessage`] impls, and
+///    `<service>_server` / `<service>_client` modules for every
+///    `rpc_service` block. The output goes to `<stem>_grpc.rs`.
+///
+/// Consumers wire the two files in via:
+/// ```ignore
+/// mod generated {
+///     include!(concat!(env!("OUT_DIR"), "/<stem>_generated.rs"));
+/// }
+/// include!(concat!(env!("OUT_DIR"), "/<stem>_grpc.rs"));
+/// ```
 ///
 /// # Arguments
 ///
@@ -119,6 +136,34 @@ pub fn compile_fbs(
     let out_file = Path::new(&out_dir).join(format!("{out_name}_generated.rs"));
     std::fs::write(&out_file, &code)?;
 
+    // gRPC stubs: alias the `*T` owned wrappers to bare names, generate
+    // `FlatBufferGrpcMessage` impls for them, and emit one server +
+    // client module per `rpc_service` block. Skipped when there are no
+    // services so consumers without RPC contracts don't pay the codegen
+    // cost.
+    let schema_def = codegen_flatbuffers::from_resolved_schema(&result.schema)
+        .map_err(|e| io::Error::other(format!("schema conversion failed: {e}")))?;
+
+    let grpc_file = Path::new(&out_dir).join(format!("{out_name}_grpc.rs"));
+    if schema_def.services.is_empty() {
+        // Always write *something* so the consumer's `include!` doesn't
+        // fail when a schema has no services. An empty file compiles fine
+        // when included at the top level.
+        std::fs::write(&grpc_file, "// no services declared in schema\n")?;
+    } else {
+        let tokens = grpc_codegen::flatbuffers::generate_grpc_stubs(&schema_def)
+            .map_err(|e| io::Error::other(format!("flatbuffers gRPC stub codegen failed: {e}")))?;
+
+        // Pretty-print so the generated file is reviewable in target/.
+        let parsed = syn::parse2::<syn::File>(tokens.clone()).map_err(|e| {
+            io::Error::other(format!(
+                "flatbuffers gRPC stub generator emitted invalid Rust syntax: {e}"
+            ))
+        })?;
+        let formatted = prettyplease::unparse(&parsed);
+        std::fs::write(&grpc_file, formatted)?;
+    }
+
     Ok(())
 }
 
@@ -160,7 +205,7 @@ mod tests {
         // Random binary bytes ensure no accidental valid parse.
         std::fs::write(
             fbs_dir.join("bad.fbs"),
-            &[0xFF, 0xFE, 0x00, 0x01, 0x80, 0x81],
+            [0xFF, 0xFE, 0x00, 0x01, 0x80, 0x81],
         )
         .unwrap();
 

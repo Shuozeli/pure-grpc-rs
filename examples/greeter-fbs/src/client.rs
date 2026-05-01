@@ -8,9 +8,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let uri: http::Uri = "http://127.0.0.1:50053".parse()?;
     let mut client = GreeterClient::connect(uri).await?;
 
-    let request = HelloRequest {
-        name: "FlatBuffers-client".into(),
-    };
+    // Owned wrapper types are `#[non_exhaustive]` (mirroring the upstream
+    // Object API), so populate via Default + field assignment.
+    let mut request = HelloRequest::default();
+    request.name = Some("FlatBuffers-client".into());
 
     println!("Sending FlatBuffers request: {:?}", request);
     let response = client.say_hello(request).await?;

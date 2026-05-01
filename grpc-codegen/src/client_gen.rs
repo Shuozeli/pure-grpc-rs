@@ -21,13 +21,37 @@ pub fn generate(service: &ServiceDef) -> TokenStream {
     let connect_method = gen_connect_method(&client_name);
     let rpc_methods = service.methods.iter().map(|m| gen_rpc_method(m, &fqn));
 
+    // Streaming-only imports: only emit when at least one method actually
+    // uses streaming. Same rationale as `server_gen` -- unary-only
+    // contracts should not transitively pull in streaming traits.
+    let has_server_or_bidi = service
+        .methods
+        .iter()
+        .any(|m| matches!(m.streaming, StreamingType::Server | StreamingType::BiDi));
+    let has_client_or_bidi = service
+        .methods
+        .iter()
+        .any(|m| matches!(m.streaming, StreamingType::Client | StreamingType::BiDi));
+    let streaming_response_import = if has_server_or_bidi {
+        quote! { use grpc_core::codec::Streaming; }
+    } else {
+        quote! {}
+    };
+    let streaming_request_import = if has_client_or_bidi {
+        quote! { use grpc_core::request::IntoStreamingRequest; }
+    } else {
+        quote! {}
+    };
+
     quote! {
+        #[allow(unused_imports)]
         pub mod #mod_name {
             use grpc_client::{Grpc, GrpcService};
             use grpc_core::body::Body;
-            use grpc_core::codec::Streaming;
+            #streaming_response_import
             use grpc_core::extensions::GrpcMethod;
-            use grpc_core::request::{IntoRequest, IntoStreamingRequest};
+            use grpc_core::request::IntoRequest;
+            #streaming_request_import
             use grpc_core::{Response, Status};
             use http::uri::PathAndQuery;
             use http_body::Body as HttpBody;

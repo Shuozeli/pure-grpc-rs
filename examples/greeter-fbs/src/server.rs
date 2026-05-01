@@ -11,10 +11,16 @@ impl Greeter for MyGreeter {
         &self,
         request: Request<HelloRequest>,
     ) -> BoxFuture<Result<Response<HelloReply>, Status>> {
-        let name = request.into_inner().name;
-        let reply = HelloReply {
-            message: format!("Hello (FlatBuffers), {name}!"),
-        };
+        // The schema declares `name: string;` without `(required)`, so the
+        // generated Object API surfaces it as `Option<String>`. Default to
+        // an empty greeting when the caller omits the name.
+        let name = request.into_inner().name.unwrap_or_default();
+        // Owned wrapper types are `#[non_exhaustive]` (mirroring the
+        // upstream Object API), so populate via Default + field assignment
+        // rather than struct literal -- this remains forward-compatible if
+        // schema additions append fields later.
+        let mut reply = HelloReply::default();
+        reply.message = Some(format!("Hello (FlatBuffers), {name}!"));
         Box::pin(async move { Ok(Response::new(reply)) })
     }
 }

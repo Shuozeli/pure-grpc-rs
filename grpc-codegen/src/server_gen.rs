@@ -44,6 +44,24 @@ pub fn generate(service: &ServiceDef) -> TokenStream {
         .map(|m| gen_svc_struct(m, &service_name));
     let dispatch_arms = service.methods.iter().map(|m| gen_dispatch_arm(m, &fqn));
 
+    // Streaming-only imports: only emit when at least one method actually
+    // uses streaming. Unary-only contracts (e.g. taskq-proto) should not
+    // depend on `tokio-stream` -- the import would be a hard error there
+    // unless the caller adds the runtime dep solely to satisfy generated
+    // glue.
+    let needs_streaming_imports = service
+        .methods
+        .iter()
+        .any(|m| !matches!(m.streaming, StreamingType::None));
+    let streaming_imports = if needs_streaming_imports {
+        quote! {
+            use tokio_stream::Stream;
+            use grpc_core::Streaming;
+        }
+    } else {
+        quote! {}
+    };
+
     quote! {
         #[allow(unused_imports)]
         pub mod #mod_name {
@@ -52,9 +70,9 @@ pub fn generate(service: &ServiceDef) -> TokenStream {
             use std::pin::Pin;
             use std::sync::Arc;
             use std::task::{Context, Poll};
-            use tokio_stream::Stream;
+            #streaming_imports
             use grpc_core::body::Body;
-            use grpc_core::{Request, Response, Status, Streaming};
+            use grpc_core::{Request, Response, Status};
 
             type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
 
