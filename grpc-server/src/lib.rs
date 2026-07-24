@@ -2,7 +2,8 @@
 //!
 //! # Key types
 //!
-//! - [`Server`] — TCP listener + hyper HTTP/2 serve loop with optional TLS
+//! - [`Server`] — TCP listener + hyper HTTP/2 serve loop with optional TLS/mTLS
+//! - [`ClientAuth`], [`PeerCertificates`] — mTLS client-certificate verification and identity
 //! - [`Grpc`] — codec-agnostic handler dispatching all 4 RPC patterns
 //! - [`Router`] — HashMap-based service routing by path
 //! - [`InterceptedService`] — wraps a service with a request interceptor
@@ -25,6 +26,7 @@ mod grpc;
 #[cfg(feature = "h3")]
 mod h3_server;
 mod interceptor;
+mod mtls;
 mod router;
 mod server;
 mod service;
@@ -33,6 +35,7 @@ pub use self::grpc::Grpc;
 #[cfg(feature = "h3")]
 pub use self::h3_server::{serve_request as serve_h3_request, H3Server};
 pub use self::interceptor::{InterceptedService, Interceptor};
+pub use self::mtls::{ClientAuth, PeerCertificates};
 pub use self::router::Router;
 pub use self::server::Server;
 pub use self::service::{

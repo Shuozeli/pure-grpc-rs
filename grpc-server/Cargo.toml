@@ -40,5 +40,7 @@ quinn = { version = "0.11", optional = true, default-features = false, features 
 
 [dev-dependencies]
 grpc-core = { path = "../grpc-core", features = ["test-helpers"] }
+grpc-client = { path = "../grpc-client", features = ["tls"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 flate2 = "1"
+rcgen = "0.13"

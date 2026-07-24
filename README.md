@@ -11,7 +11,9 @@ Built on **hyper/h2/tower** for HTTP/2, with first-class support for both **Prot
 - All 4 gRPC patterns: unary, server-streaming, client-streaming, bidirectional
 - Pluggable codecs: Protobuf (prost) and FlatBuffers out of the box
 - Code generation from `.proto` files via [protobuf-rs](https://github.com/shuozeli/protobuf-rs)
-- TLS with rustls (feature-gated)
+- TLS with rustls (feature-gated), including server-side mTLS client-certificate
+  verification (`Server::mtls`) with required/optional modes and verified
+  identity exposed to handlers via `PeerCertificates`
 - Compression: gzip, deflate, zstd (all feature-gated)
 - gRPC-Web protocol support (binary and base64 modes)
 - Rich error model (`google.rpc.*` detail types via grpc-types)

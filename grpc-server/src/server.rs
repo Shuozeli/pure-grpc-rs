@@ -1,3 +1,4 @@
+use crate::mtls::PeerCertificates;
 use grpc_core::body::Body;
 use grpc_core::Http2Config;
 use http::{Request, Response};
@@ -163,6 +164,53 @@ impl Server {
         Ok(self)
     }
 
+    /// Configure mutual TLS (mTLS): PEM-encoded server certificate/key, plus
+    /// a PEM-encoded CA bundle used to verify client certificates.
+    ///
+    /// `mode` controls whether a client certificate is required to complete
+    /// the handshake ([`crate::ClientAuth::Required`]) or merely verified
+    /// when present ([`crate::ClientAuth::Optional`]). The verified chain is
+    /// available to request handlers via
+    /// `Request::extensions().get::<PeerCertificates>()`.
+    #[cfg(feature = "tls")]
+    pub fn mtls(
+        mut self,
+        cert_pem: &[u8],
+        key_pem: &[u8],
+        client_ca_pem: &[u8],
+        mode: crate::ClientAuth,
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        use rustls::server::WebPkiClientVerifier;
+        use rustls::{RootCertStore, ServerConfig};
+        use std::sync::Arc;
+
+        let certs = rustls_pemfile::certs(&mut std::io::BufReader::new(cert_pem))
+            .collect::<Result<Vec<_>, _>>()?;
+        let key = rustls_pemfile::private_key(&mut std::io::BufReader::new(key_pem))?
+            .ok_or("no private key found in PEM data")?;
+
+        let mut roots = RootCertStore::empty();
+        for ca_cert in rustls_pemfile::certs(&mut std::io::BufReader::new(client_ca_pem)) {
+            roots.add(ca_cert?)?;
+        }
+
+        let mut verifier_builder = WebPkiClientVerifier::builder(Arc::new(roots));
+        if mode == crate::ClientAuth::Optional {
+            verifier_builder = verifier_builder.allow_unauthenticated();
+        }
+        let verifier = verifier_builder.build()?;
+
+        let config = ServerConfig::builder()
+            .with_client_cert_verifier(verifier)
+            .with_single_cert(certs, key)?;
+
+        self.tls_config = Some(TlsConfig {
+            acceptor: tokio_rustls::TlsAcceptor::from(Arc::new(config)),
+        });
+
+        Ok(self)
+    }
+
     /// Serve the given service on the specified address.
     pub async fn serve<S>(
         self,
@@ -276,7 +324,16 @@ impl Server {
                             let _permit = permit;
                             match acceptor.accept(stream).await {
                                 Ok(tls_stream) => {
-                                    serve_connection(TokioIo::new(tls_stream), svc, timeout, &http2, remote_addr).await;
+                                    let peer_certs = tls_stream
+                                        .get_ref()
+                                        .1
+                                        .peer_certificates()
+                                        .map(|certs| {
+                                            PeerCertificates(Arc::new(
+                                                certs.iter().map(|c| c.as_ref().to_vec()).collect(),
+                                            ))
+                                        });
+                                    serve_connection(TokioIo::new(tls_stream), svc, timeout, &http2, remote_addr, peer_certs).await;
                                 }
                                 Err(err) => {
                                     tracing::warn!("TLS handshake error from {}: {}", remote_addr, err);
@@ -288,7 +345,7 @@ impl Server {
 
                     tokio::spawn(async move {
                         let _permit = permit;
-                        serve_connection(TokioIo::new(stream), svc, timeout, &http2, remote_addr).await;
+                        serve_connection(TokioIo::new(stream), svc, timeout, &http2, remote_addr, None).await;
                     });
                 }
                 _ = &mut signal => {
@@ -308,6 +365,7 @@ async fn serve_connection<I, S>(
     timeout: Option<Duration>,
     http2: &ServerHttp2Config,
     remote_addr: SocketAddr,
+    peer_certs: Option<PeerCertificates>,
 ) where
     I: hyper::rt::Read + hyper::rt::Write + Unpin + Send + 'static,
     S: Service<Request<Body>, Response = Response<Body>, Error = Infallible>
@@ -319,6 +377,7 @@ async fn serve_connection<I, S>(
     let hyper_svc = HyperServiceWrapper {
         inner: svc,
         timeout,
+        peer_certs,
     };
     let mut builder = ConnectionBuilder::new(TokioExecutor::new());
 
@@ -359,6 +418,7 @@ async fn serve_connection<I, S>(
 struct HyperServiceWrapper<S> {
     inner: S,
     timeout: Option<Duration>,
+    peer_certs: Option<PeerCertificates>,
 }
 
 impl<S> hyper::service::Service<Request<hyper::body::Incoming>> for HyperServiceWrapper<S>
@@ -374,7 +434,10 @@ where
     type Future = Pin<Box<dyn Future<Output = Result<Response<Body>, Infallible>> + Send>>;
 
     fn call(&self, req: Request<hyper::body::Incoming>) -> Self::Future {
-        let req = req.map(Body::new);
+        let mut req = req.map(Body::new);
+        if let Some(certs) = &self.peer_certs {
+            req.extensions_mut().insert(certs.clone());
+        }
         let mut svc = self.inner.clone();
         let timeout = self.timeout;
 
@@ -465,6 +528,70 @@ mod tests {
 
         let result = server_handle.await.unwrap();
         assert!(result.is_ok());
+    }
+
+    #[cfg(feature = "tls")]
+    fn generate_self_signed_cert(cn: &str) -> (Vec<u8>, Vec<u8>) {
+        let cert = rcgen::generate_simple_self_signed(vec![cn.to_string()]).unwrap();
+        (
+            cert.cert.pem().into_bytes(),
+            cert.key_pair.serialize_pem().into_bytes(),
+        )
+    }
+
+    #[cfg(feature = "tls")]
+    #[test]
+    fn mtls_builder_accepts_valid_pem() {
+        let (server_cert, server_key) = generate_self_signed_cert("localhost");
+        let (ca_cert, _ca_key) = generate_self_signed_cert("Test CA");
+
+        let result = Server::builder().mtls(
+            &server_cert,
+            &server_key,
+            &ca_cert,
+            crate::ClientAuth::Required,
+        );
+
+        assert!(result.is_ok());
+    }
+
+    #[cfg(feature = "tls")]
+    #[test]
+    fn mtls_builder_accepts_optional_mode() {
+        let (server_cert, server_key) = generate_self_signed_cert("localhost");
+        let (ca_cert, _ca_key) = generate_self_signed_cert("Test CA");
+
+        let result = Server::builder().mtls(
+            &server_cert,
+            &server_key,
+            &ca_cert,
+            crate::ClientAuth::Optional,
+        );
+
+        assert!(result.is_ok());
+    }
+
+    #[cfg(feature = "tls")]
+    #[test]
+    fn mtls_builder_rejects_empty_server_cert() {
+        let (_, server_key) = generate_self_signed_cert("localhost");
+        let (ca_cert, _ca_key) = generate_self_signed_cert("Test CA");
+
+        let result =
+            Server::builder().mtls(b"", &server_key, &ca_cert, crate::ClientAuth::Required);
+
+        assert!(result.is_err());
+    }
+
+    #[cfg(feature = "tls")]
+    #[test]
+    fn mtls_builder_rejects_empty_client_ca() {
+        let (server_cert, server_key) = generate_self_signed_cert("localhost");
+
+        let result =
+            Server::builder().mtls(&server_cert, &server_key, b"", crate::ClientAuth::Required);
+
+        assert!(result.is_err());
     }
 
     #[derive(Clone)]
